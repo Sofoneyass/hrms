@@ -15,6 +15,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $title = $_POST['title'];
     $description = $_POST['description'];
     $location = $_POST['location'];
+    $location = $_POST['zone'];
+    $location = $_POST['kebele'];
     $address_detail = $_POST['address_detail'];
     $bedrooms = $_POST['bedrooms'];
     $bathrooms = $_POST['bathrooms'];
