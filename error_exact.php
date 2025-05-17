@@ -1,51 +1,44 @@
 <?php
-// Enable all errors
-error_reporting(E_ALL);
+
+
+// Display all errors (for development only)
 ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
-function showExactError($error, $query = null) {
-    $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
-    $caller = $backtrace[1] ?? $backtrace[0];
-    
-    echo "<div style='background:#fff0f0; border:1px solid red; padding:15px; font-family:monospace;'>";
-    
-    // Error Origin
-    echo "<h3 style='margin-top:0; color:#d00;'>";
-    echo "💥 <u>" . basename($caller['file']) . "</u> on line <u>{$caller['line']}</u>";
-    echo "</h3>";
-    
-    // Error Details
-    echo "<p><strong>Error:</strong> " . htmlspecialchars($error->getMessage()) . "</p>";
-    
-    // Query (if provided)
-    if ($query) {
-        echo "<p><strong>Query:</strong> <code>" . htmlspecialchars($query) . "</code></p>";
-    }
-    
-    // Code Snippet
-    echo "<p><strong>Code Context:</strong></p>";
-    $lines = file($caller['file']);
-    $start = max(0, $caller['line'] - 3);
-    $snippet = array_slice($lines, $start, 5);
-    echo "<pre style='background:#f8f8f8; padding:10px;'>";
-    foreach ($snippet as $i => $line) {
-        $lineNum = $start + $i + 1;
-        $highlight = ($lineNum == $caller['line']) ? "background:#ffeb3b;" : "";
-        echo "<span style='{$highlight}'>Line {$lineNum}: " . htmlspecialchars($line) . "</span>";
-    }
-    echo "</pre>";
-    
-    echo "</div>";
-}
+// Set custom error handler
+set_error_handler(function ($severity, $message, $file, $line) {
+    if (!(error_reporting() & $severity)) return;
+    throw new ErrorException($message, 0, $severity, $file, $line);
+});
 
-// Usage Example:
-try {
-    require 'db_connection.php';
-    $query = "SELECT * FROM non_existent_table";
-    $result = $conn->query($query);
-    if (!$result) throw new Exception($conn->error);
-} catch (Exception $e) {
-    showExactError($e, $query);
-    die();
-}
+// Set exception handler
+set_exception_handler(function ($e) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'error_type' => get_class($e),
+        'message' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+        'trace' => explode("\n", $e->getTraceAsString())
+    ]);
+    exit;
+});
+
+// Register fatal error shutdown handler
+register_shutdown_function(function () {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'error_type' => 'FatalError',
+            'message' => $error['message'],
+            'file' => $error['file'],
+            'line' => $error['line']
+        ]);
+        exit;
+    }
+});
 ?>

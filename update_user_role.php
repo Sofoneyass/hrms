@@ -1,20 +1,36 @@
 <?php
-require 'auth_session.php';
-require 'db_connection.php';
+session_start();
+require_once 'db_connection.php';  // Database connection file
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['user_id'], $_POST['new_role'])) {
+// Ensure that the user is an admin
+if ($_SESSION['role'] !== 'admin') {
+    echo "Access denied.";
+    exit();
+}
+
+// Process the form submission
+if (isset($_POST['update_role'])) {
     $user_id = intval($_POST['user_id']);
-    $new_role = $_POST['new_role'];
+    $new_role = $_POST['role'];
 
-    $stmt = $conn->prepare("UPDATE users SET role = ? WHERE user_id = ?");
-    $stmt->bind_param("si", $new_role, $user_id);
+    // Validate new role value
+    $valid_roles = ['admin', 'owner', 'tenant'];
+    if (!in_array($new_role, $valid_roles)) {
+        echo "Invalid role selected.";
+        exit();
+    }
+
+    // Prepare SQL query to update role
+    $sql = "UPDATE users SET role = ? WHERE user_id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('si', $new_role, $user_id);
+
     if ($stmt->execute()) {
-        header("Location: manage_users.php?success=Role updated");
+        echo "User role updated successfully!";
     } else {
         echo "Error updating role.";
     }
+
     $stmt->close();
-} else {
-    echo "Invalid request.";
 }
 ?>

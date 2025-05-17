@@ -1,9 +1,11 @@
 <?php
 // Start the session
 session_start();
-
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 // Include the database connection file
-require_once 'db_connection.php'; // Make sure you have a db_connection.php file that connects to your MySQL database
+require_once 'db_connection.php';
 require_once 'header.php';
 require_once 'hero_section.php';
 require_once 'chooseus.php';

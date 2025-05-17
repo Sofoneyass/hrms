@@ -1,68 +1,151 @@
 <?php
-include 'auth_session.php';
-require 'db_connection.php';
+include 'db_connection.php';
 
-$query = "SELECT user_id, full_name, email, phone, role, created_at FROM users";
-$result = $conn->query($query);
+$query = "SELECT * FROM users ORDER BY created_at DESC";
+$result = mysqli_query($conn, $query);
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Admin - Manage Users</title>
-    <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
     <style>
-        body { font-family: Arial, sans-serif; background: #f8f9fa; margin: 0; padding: 0; }
-        .container { padding: 30px; }
-        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #343a40; color: white; }
-        a.action-btn { margin-right: 10px; text-decoration: none; font-weight: bold; }
-        .edit { color: green; }
-        .delete { color: red; }
-        .activity { color: #007bff; }
-        h2 { color: #333; }
-        select { padding: 5px; }
+        :root {
+            --primary: #10B981;
+            --secondary: #FBBF24;
+            --accent: #06B6D4;
+            --dark: #1F2937;
+            --darker: #111827;
+            --text-light: rgba(255,255,255,0.9);
+            --text-muted: rgba(255,255,255,0.7);
+            --card-bg: rgba(31, 41, 55, 0.8);
+            --card-border: rgba(255, 255, 255, 0.15);
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--darker);
+            color: var(--text-light);
+        }
+
+        .container {
+            padding: 2rem;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+        }
+
+        th {
+            background-color: var(--dark);
+        }
+
+        tr:nth-child(even) {
+            background-color: rgba(255,255,255,0.02);
+        }
+
+        .btn {
+            padding: 6px 10px;
+            margin: 2px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            color: white;
+        }
+
+        .btn-edit { background-color: var(--accent); }
+        .btn-delete { background-color: crimson; }
+        .btn-role { background-color: var(--secondary); color: black; }
+
+        .btn:hover {
+            opacity: 0.85;
+        }
+
+        select {
+            padding: 4px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Manage Users</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>User ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Created At</th><th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php while ($row = $result->fetch_assoc()): ?>
-                <tr>
-                    <td><?= $row['user_id'] ?></td>
-                    <td><?= htmlspecialchars($row['full_name']) ?></td>
-                    <td><?= htmlspecialchars($row['email']) ?></td>
-                    <td><?= htmlspecialchars($row['phone']) ?></td>
-                    <td>
-                        <form action="update_user_role.php" method="post" style="display:inline;">
-                            <input type="hidden" name="user_id" value="<?= $row['user_id'] ?>">
-                            <select name="role" onchange="this.form.submit()">
-                                <option value="tenant" <?= $row['role'] === 'tenant' ? 'selected' : '' ?>>Tenant</option>
-                                <option value="owner" <?= $row['role'] === 'owner' ? 'selected' : '' ?>>Owner</option>
-                                <option value="admin" <?= $row['role'] === 'admin' ? 'selected' : '' ?>>Admin</option>
-                            </select>
-                        </form>
-                    </td>
-                    <td><?= $row['created_at'] ?></td>
-                    <td>
-                        <a class="action-btn edit" href="edit_user.php?id=<?= $row['user_id'] ?>">Edit</a>
-                        <a class="action-btn delete" href="delete_user.php?id=<?= $row['user_id'] ?>" onclick="return confirm('Are you sure you want to delete this user?')">Delete</a>
-                        <a class="action-btn activity" href="user_activity.php?id=<?= $row['user_id'] ?>">Activity</a>
-                    </td>
-                </tr>
-                <?php endwhile; ?>
-            </tbody>
-        </table>
-        <br>
-        <a href="overall_users_report.php" style="font-weight:bold;">📊 Generate User Reports</a>
-    </div>
+
+<div class="container">
+    <h1>Manage Users</h1>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Full Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Created At</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php while($user = mysqli_fetch_assoc($result)): ?>
+            <tr>
+                <td><?= $user['user_id'] ?></td>
+                <td><?= htmlspecialchars($user['full_name']) ?></td>
+                <td><?= htmlspecialchars($user['email']) ?></td>
+                <td><?= htmlspecialchars($user['phone']) ?></td>
+                <td>
+                    <select onchange="changeRole(<?= $user['user_id'] ?>, this.value)">
+                        <option value="admin" <?= $user['role'] == 'admin' ? 'selected' : '' ?>>Admin</option>
+                        <option value="owner" <?= $user['role'] == 'owner' ? 'selected' : '' ?>>Owner</option>
+                        <option value="tenant" <?= $user['role'] == 'tenant' ? 'selected' : '' ?>>Tenant</option>
+                    </select>
+                </td>
+                <td><?= ucfirst($user['status']) ?></td>
+                <td><?= $user['created_at'] ?></td>
+                <td>
+                    <button class="btn btn-edit" onclick="editUser(<?= $user['user_id'] ?>)">Edit</button>
+                    <button class="btn btn-delete" onclick="deleteUser(<?= $user['user_id'] ?>)">Delete</button>
+                </td>
+            </tr>
+        <?php endwhile; ?>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    function editUser(id) {
+        window.location.href = 'edit_user.php?user_id=' + id;
+    }
+
+    function deleteUser(id) {
+        if (confirm("Are you sure you want to delete this user?")) {
+            window.location.href = 'delete_user.php?user_id=' + id;
+        }
+    }
+
+    function changeRole(userId, newRole) {
+        if (confirm("Are you sure you want to change the user role to " + newRole + "?")) {
+            window.location.href = 'update_user_role.php?user_id=' + userId + '&role=' + newRole;
+        }
+    }
+</script>
+
 </body>
 </html>

@@ -1,111 +1,145 @@
 <?php
-include 'auth_session.php';
-require 'db_connection.php';
+include 'db_connection.php'; 
 
-// Query to get available properties
-$available_query = "SELECT property_id, title, location, price_per_month, status, created_at FROM properties WHERE status = 'available'";
-$available_result = $conn->query($available_query);
-
-// Query to get reserved properties
-$reserved_query = "SELECT property_id, title, location, price_per_month, status, created_at FROM properties WHERE status = 'reserved'";
-$reserved_result = $conn->query($reserved_query);
-
-// Handle approve/reject actions
-if (isset($_GET['action']) && isset($_GET['id'])) {
-    $property_id = $_GET['id'];
-    $action = $_GET['action'];
-
-    if ($action == 'approve') {
-        // Update the property status to 'reserved' (if it's not already reserved)
-        $update_query = "UPDATE properties SET status = 'reserved' WHERE property_id = $property_id AND status != 'reserved'";
-        if ($conn->query($update_query)) {
-            echo "<script>alert('Property reserved successfully'); window.location.href = 'manage_properties.php';</script>";
-        } else {
-            echo "<script>alert('Error reserving property');</script>";
-        }
-    } elseif ($action == 'reject') {
-        // Update the property status to 'available' (if it's reserved)
-        $update_query = "UPDATE properties SET status = 'available' WHERE property_id = $property_id AND status = 'reserved'";
-        if ($conn->query($update_query)) {
-            echo "<script>alert('Property marked as available'); window.location.href = 'manage_properties.php';</script>";
-        } else {
-            echo "<script>alert('Error updating property status');</script>";
-        }
-    }
-}
+// Fetch all properties
+$query = "SELECT * FROM properties ORDER BY created_at DESC";
+$result = mysqli_query($conn, $query);
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Manage Properties</title>
-    <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    
     <style>
-        body { font-family: Arial, sans-serif; background: #f8f9fa; margin: 0; padding: 0; }
-        .container { padding: 30px; }
-        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #343a40; color: white; }
-        a.delete-btn { color: red; text-decoration: none; font-weight: bold; }
-        .action-btns a { margin-right: 10px; color: #28a745; text-decoration: none; font-weight: bold; }
-        .action-btns a.reject { color: #dc3545; }
-        h2 { color: #333; }
-        h3 { color: #007bff; margin-top: 40px; }
+        :root {
+            --primary: #10B981;
+            --secondary: #FBBF24;
+            --accent: #06B6D4;
+            --dark: #1F2937;
+            --darker: #111827;
+            --text-light: rgba(255,255,255,0.9);
+            --text-muted: rgba(255,255,255,0.7);
+            --card-bg: rgba(31, 41, 55, 0.8);
+            --card-border: rgba(255, 255, 255, 0.15);
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--darker);
+            color: var(--text-light);
+        }
+
+        .container {
+            padding: 2rem;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+        }
+
+        th {
+            background-color: var(--dark);
+            color: var(--text-light);
+        }
+
+        tr:nth-child(even) {
+            background-color: rgba(255,255,255,0.02);
+        }
+
+        .btn {
+            padding: 6px 10px;
+            margin: 2px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            color: white;
+        }
+
+        .btn-success { background-color: var(--primary); }
+        .btn-danger { background-color: crimson; }
+        .btn-warning { background-color: var(--secondary); color: black; }
+        .btn-info { background-color: var(--accent); }
+
+        .btn:hover {
+            opacity: 0.85;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Manage Properties</h2>
 
-        <!-- Available Properties Table -->
-        <h3>Available Properties</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th><th>Title</th><th>Location</th><th>Price</th><th>Status</th><th>Created</th><th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php while ($row = $available_result->fetch_assoc()): ?>
-                <tr>
-                    <td><?= $row['property_id'] ?></td>
-                    <td><?= htmlspecialchars($row['title']) ?></td>
-                    <td><?= htmlspecialchars($row['location']) ?></td>
-                    <td>$<?= number_format($row['price_per_month'], 2) ?></td>
-                    <td><?= $row['status'] ?></td>
-                    <td><?= $row['created_at'] ?></td>
-                    <td><a class="delete-btn" href="delete_property.php?id=<?= $row['property_id'] ?>" onclick="return confirm('Delete this property?')">Delete</a></td>
-                </tr>
-                <?php endwhile; ?>
-            </tbody>
-        </table>
+<div class="container">
+    
 
-        <!-- Reserved Properties Table -->
-        <h3>Reserved Properties</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th><th>Title</th><th>Location</th><th>Price</th><th>Status</th><th>Created</th><th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php while ($row = $reserved_result->fetch_assoc()): ?>
-                <tr>
-                    <td><?= $row['property_id'] ?></td>
-                    <td><?= htmlspecialchars($row['title']) ?></td>
-                    <td><?= htmlspecialchars($row['location']) ?></td>
-                    <td>$<?= number_format($row['price_per_month'], 2) ?></td>
-                    <td><?= $row['status'] ?></td>
-                    <td><?= $row['created_at'] ?></td>
-                    <td class="action-btns">
-                        <!-- Approve and Reject Buttons -->
-                        <a href="manage_properties.php?action=approve&id=<?= $row['property_id'] ?>" onclick="return confirm('Approve this reservation?')" class="approve">Approve</a>
-                        <a href="manage_properties.php?action=reject&id=<?= $row['property_id'] ?>" onclick="return confirm('Reject this reservation?')" class="reject">Reject</a>
-                    </td>
-                </tr>
-                <?php endwhile; ?>
-            </tbody>
-        </table>
-    </div>
+    <table>
+        <thead>
+        <tr>
+            <th>Title</th>
+            <th>Owner ID</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Created At</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        <?php while($row = mysqli_fetch_assoc($result)): ?>
+            <tr>
+                <td><?= htmlspecialchars($row['title']) ?></td>
+                <td><?= $row['owner_id'] ?></td>
+                <td>$<?= number_format($row['price_per_month'], 2) ?></td>
+                <td><?= ucfirst($row['status']) ?></td>
+                <td><?= $row['created_at'] ?></td>
+                <td>
+                    <button class="btn btn-success" onclick="approveProperty(<?= $row['property_id'] ?>)">Approve</button>
+                    <button class="btn btn-danger" onclick="rejectProperty(<?= $row['property_id'] ?>)">Reject</button>
+                    
+                    <button class="btn btn-info" onclick="viewReport(<?= $row['property_id'] ?>)">View Report</button>
+                </td>
+            </tr>
+        <?php endwhile; ?>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    function approveProperty(id) {
+        if (confirm("Are you sure you want to approve this property?")) {
+            window.location.href = 'property_actions.php?action=approve&id=' + id;
+        }
+    }
+
+    function rejectProperty(id) {
+        if (confirm("Are you sure you want to reject this property?")) {
+            window.location.href = 'property_actions.php?action=reject&id=' + id;
+        }
+    }
+
+    function editProperty(id) {
+        window.location.href = 'edit_property.php?property_id=' + id;
+    }
+
+    function viewReport(id) {
+        window.location.href = 'property_report.php?property_id=' + id;
+    }
+</script>
+
 </body>
 </html>

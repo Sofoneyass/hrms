@@ -1,57 +1,105 @@
 <?php
 session_start();
-require 'db_connection.php';
+require_once 'db_connection.php';
 
-// Only owners can access this page
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'owner') {
-    header("Location: login.php");
-    exit();
-}
-
-$owner_id = $_SESSION['user_id'];
-
-// Fetch owner properties + photo
-$sql = "
-    SELECT p.*, 
-           (SELECT photo_url FROM property_photos WHERE property_id = p.property_id LIMIT 1) AS photo
+// Fetch all properties with their photos
+$query = "
+    SELECT p.*, pp.photo_url
     FROM properties p
-    WHERE p.owner_id = ?
+    LEFT JOIN property_photos pp ON p.property_id = pp.property_id
+    ORDER BY p.created_at DESC
 ";
-$stmt = $conn->prepare($sql);
-if (!$stmt) {
-    die("Prepare failed: " . $conn->error);
-}
+$result = $conn->query($query);
 
-$stmt->bind_param("i", $owner_id);
-$stmt->execute();
-$result = $stmt->get_result();
+$conn->close();
 ?>
-
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
+    <title>Properties | JIGJIGAHOMES</title>
     <meta charset="UTF-8">
-    <title>My Properties</title>
-    <link rel="stylesheet" href="style.css">  <!-- External CSS if needed -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
-        .properties-container { max-width: 1200px; margin: auto; }
-        .properties-title { text-align: center; margin-bottom: 20px; font-size: 24px; font-weight: bold; color: #333; }
+        :root {
+            --primary: #2a7f62;
+            --secondary: #f0c14b;
+            --accent: #e2b33a;
+            --dark: #1e3c2b;
+            --text-light: #fff;
+            --text-muted: rgba(255, 255, 255, 0.7);
+            --card-bg: rgba(255, 255, 255, 0.1);
+            --card-border: rgba(255, 255, 255, 0.15);
+            --glass-blur: blur(10px);
+            --shadow-depth: 0 10px 30px rgba(0, 0, 0, 0.2);
+            --hover-shadow: 0 5px 15px rgba(240, 193, 75, 0.3);
+            --transition-fast: all 0.3s ease;
+        }
 
-        .properties-grid {
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c2b 0%, #2a7f62 100%);
+            color: var(--text-light);
+            min-height: 100vh;
+        }
+
+        .main-content {
+            margin-left: 270px;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--card-border);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-depth);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 30px;
+            color: var(--text-light);
+            position: relative;
+            padding-bottom: 10px;
+        }
+
+        h1::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            bottom: 0;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 2px;
+            background: var(--secondary);
+        }
+
+        .property-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
         }
 
         .property-card {
-            background: #fff;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            transition: 0.3s;
-            padding: 10px;
-            text-align: center;
+            background: var(--card-bg);
+            backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow-depth);
+            transition: var(--transition-fast);
+        }
+
+        .property-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--hover-shadow);
         }
 
         .property-card img {
@@ -59,84 +107,111 @@ $result = $stmt->get_result();
             height: 200px;
             object-fit: cover;
             border-radius: 8px;
+            margin-bottom: 15px;
         }
 
-        .property-content {
-            padding: 15px;
+        .property-card h3 {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0 0 10px;
+            color: var(--text-light);
         }
 
-        .property-content h3 { margin-top: 0; font-size: 20px; font-weight: 600; }
+        .property-card p {
+            margin: 5px 0;
+            font-size: 15px;
+            color: var(--text-muted);
+        }
 
-        .price {
-            font-weight: bold;
-            color: #28a745;
+        .property-card .price {
             font-size: 18px;
+            font-weight: 600;
+            color: var(--secondary);
         }
 
-        .status {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            margin-top: 10px;
+        .property-card .status {
+            font-weight: 500;
+            color: #22c55e;
         }
 
-        .status.available { background: #d4edda; color: #155724; }
-        .status.reserved { background: #fff3cd; color: #856404; }
-        .status.occupied { background: #f8d7da; color: #721c24; }
+        .no-properties {
+            text-align: center;
+            font-size: 16px;
+            color: var(--text-muted);
+        }
 
-        .view-button, .edit-button {
-            display: inline-block;
-            margin-top: 10px;
-            padding: 6px 12px;
-            background: #007bff;
-            color: white;
+        .nav-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .nav-link a {
+            color: var(--secondary);
             text-decoration: none;
-            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 500;
+            transition: var(--transition-fast);
         }
 
-        .view-button:hover, .edit-button:hover {
-            background: #0056b3;
+        .nav-link a:hover {
+            color: var(--accent);
         }
 
-        .edit-button {
-            background: #ffc107;
+        @media (max-width: 768px) {
+            .main-content {
+                margin-left: 220px;
+            }
+
+            .property-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
         }
 
-        .edit-button:hover {
-            background: #e0a800;
+        @media (max-width: 480px) {
+            .main-content {
+                margin-left: 0;
+                padding: 15px;
+            }
         }
     </style>
 </head>
 <body>
-
-<div class="properties-container">
-    <h1 class="properties-title">My Properties</h1>
-
-    <div class="properties-grid">
-        <?php if ($result && $result->num_rows > 0): ?>
-            <?php while ($row = $result->fetch_assoc()): ?>
-                <div class="property-card">
-                    <img src="<?= $row['photo'] ? htmlspecialchars($row['photo']) : 'uploads/default.png' ?>" alt="Property Image">
-                    <div class="property-content">
-                        <h3><?= htmlspecialchars($row['title']) ?></h3>
-                        <p><?= htmlspecialchars($row['location']) ?> — <?= htmlspecialchars($row['address_detail']) ?></p>
-                        <p><?= $row['bedrooms'] ?> Beds | <?= $row['bathrooms'] ?> Baths</p>
-                        <p class="price">BIRR <?= number_format($row['price_per_month'], 2) ?> / month</p>
-                        <span class="status <?= $row['status'] ?>"><?= ucfirst($row['status']) ?></span>
-                        <div>
-                            <a href="property_detail.php?id=<?= $row['property_id'] ?>" class="view-button">View Details</a>
-                            <a href="edit_property.php?id=<?= $row['property_id'] ?>" class="edit-button">Edit</a>
-                            <a href="reserve_properties.php?id=<?= $row['property_id'] ?>" class="view-button">Reserve</a>
+    
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <h1>Properties</h1>
+            <?php if ($result->num_rows > 0): ?>
+                <div class="property-grid">
+                    <?php while ($property = $result->fetch_assoc()): ?>
+                        <div class="property-card">
+                            <?php if (!empty($property['photo_url'])): ?>
+                                <img src="<?php echo htmlspecialchars($property['photo_url']); ?>" alt="Property Image">
+                            <?php endif; ?>
+                            <h3><?php echo htmlspecialchars($property['title']); ?></h3>
+                            <p><strong>Location:</strong> <?php echo htmlspecialchars($property['location']); ?></p>
+                            <p><strong>Zone:</strong> <?php echo htmlspecialchars($property['zone']); ?></p>
+                            <p><strong>Kebele:</strong> <?php echo htmlspecialchars($property['kebele']); ?></p>
+                            <?php if (!empty($property['description'])): ?>
+                                <p><strong>Description:</strong> <?php echo htmlspecialchars($property['description']); ?></p>
+                            <?php endif; ?>
+                            <p><strong>Bedrooms:</strong> <?php echo $property['bedrooms']; ?></p>
+                            <p><strong>Bathrooms:</strong> <?php echo $property['bathrooms']; ?></p>
+                            <p class="price">$<?php echo number_format($property['price_per_month'], 2); ?>/month</p>
+                            <p class="status"><?php echo htmlspecialchars($property['status']); ?></p>
                         </div>
-                    </div>
+                    <?php endwhile; ?>
                 </div>
-            <?php endwhile; ?>
-        <?php else: ?>
-            <p>No properties listed yet.</p>
-        <?php endif; ?>
+            <?php else: ?>
+                <p class="no-properties">No properties found.</p>
+            <?php endif; ?>
+            <div class="nav-link">
+                <a href="/add-property">Add New Property</a>
+            </div>
+        </div>
     </div>
-</div>
-
 </body>
 </html>

@@ -17,60 +17,6 @@ $ownerCountQuery = "SELECT COUNT(*) AS total_owners FROM users WHERE role = 'own
 $ownerCountResult = mysqli_query($conn, $ownerCountQuery);
 $ownerCount = mysqli_fetch_assoc($ownerCountResult)['total_owners'] ?? 0;
 ?>
-<section class="hero">
-    <!-- Background Image with Overlay -->
-    <div class="hero-background">
-        <div class="hero-overlay"></div>
-        <img src="img/jigjigacity.jpeg" alt="Jigjiga City View" class="hero-image">
-    </div>
-
-    <!-- Hero Content -->
-    <div class="hero-content">
-        <div class="hero-text">
-            <h1 class="hero-title">Find Your Perfect Home in <span>Jigjiga</span></h1>
-            <p class="hero-subtitle">Premium rentals in the heart of the Somali Region</p>
-            
-            <!-- Search Bar -->
-            <div class="hero-search">
-                <form action="/properties" method="GET">
-                    <div class="search-input-group">
-                        <input 
-                            type="text" 
-                            name="location" 
-                            placeholder="Search by neighborhood (e.g., Karaamarda, Aw-Dale)" 
-                            class="search-input"
-                        >
-                        <select name="type" class="search-select">
-                            <option value="">Any Type</option>
-                            <option value="apartment">Apartment</option>
-                            <option value="villa">Villa</option>
-                            <option value="house">House</option>
-                        </select>
-                        <button type="submit" class="search-button">
-                            <i class="fas fa-search"></i> Search
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Stats Bar -->
-        <div class="hero-stats">
-    <div class="stat-item">
-        <span class="stat-number"><?= $propertyCount ?></span>
-        <span class="stat-label">Properties</span>
-    </div>
-    <div class="stat-item">
-        <span class="stat-number"><?= $tenantCount ?></span>
-        <span class="stat-label">Tenants</span>
-    </div>
-    <div class="stat-item">
-        <span class="stat-number"><?= $ownerCount ?></span>
-        <span class="stat-label">Owners</span>
-    </div>
-</div>
-</section>
-
 <!-- CSS Styling -->
 <style>
     /* ===== Hero Section ===== */
@@ -249,3 +195,132 @@ $ownerCount = mysqli_fetch_assoc($ownerCountResult)['total_owners'] ?? 0;
         }
     }
 </style>
+<section class="hero">
+    <!-- Background Image with Overlay -->
+    <div class="hero-background">
+        <div class="hero-overlay"></div>
+        <img src="img/jigjigacity.jpeg" alt="Jigjiga City View" class="hero-image">
+    </div>
+
+    <!-- Hero Content -->
+    <div class="hero-content">
+        <div class="hero-text">
+            <h1 class="hero-title">Find Your Perfect Home in <span>Jigjiga</span></h1>
+            <p class="hero-subtitle">Premium rentals in the heart of the Somali Region</p>
+            
+            <!-- Search Bar -->
+            <div class="hero-search">
+                <form action="search_properties.php" method="GET">
+                    <div class="search-input-group">
+                        <input 
+                            type="text" 
+                            name="location" 
+                            placeholder="Search by neighborhood (e.g., Karaamarda, Aw-Dale)" 
+                            class="search-input"
+                        >
+                        
+                        <select name="title" class="search-select">
+                            <option value="">Any Type</option>
+                            <option value="apartment">Apartment</option>
+                            <option value="villa">Villa</option>
+                            <option value="house">condo</option>
+                        </select>
+                        <button type="submit" class="search-button">
+                            <i class="fas fa-search"></i> Search
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+
+        </div>
+
+        <!-- Stats Bar -->
+        <div class="hero-stats">
+    <div class="stat-item">
+        <span class="stat-number"><?= $propertyCount ?></span>
+        <span class="stat-label">Properties</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-number"><?= $tenantCount ?></span>
+        <span class="stat-label">Tenants</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-number"><?= $ownerCount ?></span>
+        <span class="stat-label">Owners</span>
+    </div>
+</div>
+</section>
+
+
+<script>
+document.getElementById('searchForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const filters = Object.fromEntries(formData);
+    await fetchProperties(filters);
+});
+
+async function fetchProperties(filters = {}) {
+    const params = new URLSearchParams(filters);
+    const response = await fetch(`fetch_properties.php?${params}`);
+    const data = await response.json();
+    const propertyGrid = document.querySelector('.properties-grid');
+    const user_id = <?php echo json_encode($user_id ?? null); ?>;
+
+    if (data.success && data.properties.length > 0) {
+        propertyGrid.innerHTML = data.properties.map(prop => `
+            <div class="property-card glassmorphism p-4 rounded-lg fade-in">
+                <div class="property-image-container relative">
+                    <img src="${prop.photo || 'default-placeholder.jpg'}" alt="${prop.title}" class="property-image w-full h-48 object-cover rounded-lg">
+                    <span class="property-badge ${prop.status}">${prop.status.charAt(0).toUpperCase() + prop.status.slice(1)}</span>
+                    ${user_id ? `
+                        <button class="favorite-btn ${prop.is_favorited ? 'favorited' : ''}" 
+                                data-property-id="${prop.property_id}" 
+                                title="${prop.is_favorited ? 'Remove from Favorites' : 'Add to Favorites'}">
+                            <i class="${prop.is_favorited ? 'fas' : 'far'} fa-heart"></i>
+                        </button>
+                    ` : ''}
+                    <div class="property-overlay">
+                        <a href="property_detail.php?id=${prop.property_id}" class="quick-view-btn">
+                            <i class="fas fa-expand"></i> Quick View
+                        </a>
+                    </div>
+                </div>
+                <div class="property-content p-4">
+                    <div class="property-meta flex justify-between text-sm text-gray-300 mb-2">
+                        <span><i class="fas fa-map-marker-alt"></i> ${prop.location}</span>
+                        <span><i class="fas fa-tag"></i> BIRR ${parseFloat(prop.price).toFixed(2)}</span>
+                    </div>
+                    <h3 class="property-title text-xl font-semibold mb-2">${prop.title}</h3>
+                    <div class="property-features flex gap-4 text-sm text-gray-300 mb-4">
+                        <span><i class="fas fa-bed"></i> ${prop.bedrooms} Beds</span>
+                    </div>
+                    <div class="property-footer flex justify-between items-center">
+                        <a href="property_detail.php?id=${prop.property_id}" class="details-btn">
+                            Details <i class="fas fa-arrow-right"></i>
+                        </a>
+                        <a href="reserve_property.php?id=${prop.property_id}" class="reserve-btn">
+                            Reserve Now
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        propertyGrid.innerHTML = `
+            <div class="no-properties glassmorphism rounded-lg p-6 text-center">
+                <i class="fas fa-home text-4xl mb-4 text-blue-400"></i>
+                <h3 class="text-xl font-semibold mb-2">No Properties Found</h3>
+                <p class="text-gray-300">Try adjusting your search filters or check back later.</p>
+                <a href="#" class="browse-btn inline-block mt-4 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg">
+                    Browse All Listings
+                </a>
+            </div>
+        `;
+    }
+}
+
+// Initial load
+fetchProperties();
+</script>

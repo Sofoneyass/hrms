@@ -58,7 +58,7 @@ $responseData = json_decode($response, true);
 
 if (isset($responseData['status']) && $responseData['status'] == 'success') {
     // Get payment details
-    $transaction_reference = $responseData['data']['tx_ref'];
+    $transaction_reference = $responseData['data']['transaction_reference'];
     $checkout_url = $responseData['data']['checkout_url'];
     
     // Store payment info into the database

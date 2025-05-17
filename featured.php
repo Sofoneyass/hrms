@@ -1,10 +1,47 @@
 <?php
+
 require_once 'db_connection.php';
+
+// Initialize CSRF token if not set
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Check if user is logged in
+$user_id = $_SESSION['user_id'] ?? null;
+
+// Fetch all properties with their first photo
 $sql = "SELECT p.*, 
         (SELECT photo_url FROM property_photos WHERE property_id = p.property_id LIMIT 1) AS photo 
-        FROM properties p ORDER BY p.created_at DESC";
+        FROM properties p 
+        ORDER BY p.created_at DESC";
 $result = $conn->query($sql);
+
+// Initialize favorited properties array
+$favorited_properties = [];
+
+if (isset($user_id)) {
+    // Ensure this user is a tenant before checking favorites
+    $role_check = $conn->prepare("SELECT role FROM users WHERE user_id = ?");
+    $role_check->bind_param("i", $user_id);
+    $role_check->execute();
+    $role_result = $role_check->get_result();
+    $user_role = $role_result->fetch_assoc()['role'];
+    $role_check->close();
+
+    if ($user_role === 'tenant') {
+        $stmt = $conn->prepare("SELECT property_id FROM favorites WHERE tenant_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $fav_result = $stmt->get_result();
+        while ($row = $fav_result->fetch_assoc()) {
+            $favorited_properties[] = $row['property_id'];
+        }
+        $stmt->close();
+    }
+}
 ?>
+
 <section class="featured-properties">
     <div class="container">
         <div class="section-header">
@@ -13,16 +50,23 @@ $result = $conn->query($sql);
         </div>
 
         <div class="properties-grid">
-        <?php if ($result && $result->num_rows > 0): ?>
+            <?php if ($result && $result->num_rows > 0): ?>
                 <?php while ($row = $result->fetch_assoc()): ?>
                     <div class="property-card">
                         <div class="property-image-container">
-                            <img src="<?= htmlspecialchars($row['photo'] ?? 'uploads/default.png') ?>" 
+                            <img src="<?= htmlspecialchars($row['photo'] ?? 'Uploads/default.png') ?>" 
                                  alt="<?= htmlspecialchars($row['title']) ?>" 
                                  class="property-image">
                             <span class="property-badge <?= htmlspecialchars($row['status']) ?>">
                                 <?= ucfirst($row['status']) ?>
                             </span>
+                            <?php if ($user_id): ?>
+                                <button class="favorite-btn <?= in_array($row['property_id'], $favorited_properties) ? 'favorited' : '' ?>" 
+                                        data-property-id="<?= $row['property_id'] ?>" 
+                                        title="<?= in_array($row['property_id'], $favorited_properties) ? 'Remove from Favorites' : 'Add to Favorites' ?>">
+                                    <i class="<?= in_array($row['property_id'], $favorited_properties) ? 'fas' : 'far' ?> fa-heart"></i>
+                                </button>
+                            <?php endif; ?>
                             <div class="property-overlay">
                                 <a href="property_detail.php?id=<?= $row['property_id'] ?>" class="quick-view-btn">
                                     <i class="fas fa-expand"></i> Quick View
@@ -53,7 +97,7 @@ $result = $conn->query($sql);
                             <div class="property-footer">
                                 <p class="property-price">BIRR <?= number_format($row['price_per_month'], 2) ?><span>/month</span></p>
                                 <div class="property-actions">
-                                    <a href="property_detail.php?id=<?= $row['property_id'] ?>" class="details-btn">
+                                    <a href="property_detail.php?id=<?=$row['property_id'] ?>" class="details-btn">
                                         Details <i class="fas fa-arrow-right"></i>
                                     </a>
                                     <a href="reserve_property.php?id=<?= $row['property_id'] ?>" class="reserve-btn">
@@ -197,16 +241,59 @@ $result = $conn->query($sql);
         z-index: 2;
     }
 
-    .property-badge.available {
+    .property-badge.active {
         background: #2ecc71;
     }
 
-    .property-badge.rented {
+    .property-badge.inactive {
         background: #e74c3c;
     }
 
     .property-badge.pending {
         background: #f39c12;
+    }
+
+    /* Favorite Button */
+    .favorite-btn {
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        background: rgba(255, 255, 255, 0.9);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 2;
+        transition: all 0.3s ease;
+    }
+
+    body.dark-mode .favorite-btn {
+        background: rgba(30, 60, 43, 0.9);
+    }
+
+    .favorite-btn i {
+        font-size: 18px;
+        color: #666;
+    }
+
+    .favorite-btn.favorited i {
+        color: #e74c3c;
+    }
+
+    .favorite-btn:hover {
+        background: #f0c14b;
+    }
+
+    .favorite-btn:hover i {
+        color: #1e3c2b;
+    }
+
+    body.dark-mode .favorite-btn:hover i {
+        color: #f8f9fa;
     }
 
     .property-overlay {
@@ -516,3 +603,52 @@ $result = $conn->query($sql);
         }
     }
 </style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const favoriteButtons = document.querySelectorAll('.favorite-btn');
+        
+        favoriteButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const propertyId = button.dataset.propertyId;
+                const isFavorited = button.classList.contains('favorited');
+                const csrfToken = '<?= $_SESSION['csrf_token'] ?>';
+
+                // If user is not logged in, redirect to login
+                <?php if (!$user_id): ?>
+                    alert('Please log in to add properties to your favorites.');
+                    window.location.href = 'index.php';
+                    return;
+                <?php endif; ?>
+
+                // Send AJAX request to toggle favorite
+                fetch('toggle_favorite.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        property_id: propertyId,
+                        csrf_token: csrfToken
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        button.classList.toggle('favorited');
+                        const icon = button.querySelector('i');
+                        icon.classList.toggle('far');
+                        icon.classList.toggle('fas');
+                        button.title = isFavorited ? 'Add to Favorites' : 'Remove from Favorites';
+                    } else {
+                        alert(data.message || 'An error occurred.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error toggling favorite:', error);
+                    alert('An error occurred while processing your request.');
+                });
+            });
+        });
+    });
+</script>

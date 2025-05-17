@@ -1,6 +1,6 @@
 <footer class="jigjiga-footer">
  <style>
-    /* Jigjiga Footer Styles */
+ 
 .jigjiga-footer {
   background: linear-gradient(135deg, #1e3c2b 0%, #2a7f62 100%);
   color: #fff;
@@ -324,14 +324,14 @@
           <i class="fas fa-phone-alt"></i>
           <div>
             <span>Call Us</span>
-            <p>+251 47 111 2233</p>
+            <p>+2519123456</p>
           </div>
         </div>
         <div class="contact-method">
           <i class="fas fa-envelope"></i>
           <div>
             <span>Email Us</span>
-            <p>rentals@jigjigahomes.com</p>
+            <p>rental@jigjigahomes.com</p>
           </div>
         </div>
         <div class="contact-method">
@@ -351,7 +351,7 @@
       <div class="footer-col">
         <h4>Quick Links</h4>
         <ul>
-          <li><a href="/properties">Browse Homes</a></li>
+          <li><a href="properties.php">Browse Homes</a></li>
           <li><a href="/agents">Local Agents</a></li>
           <li><a href="/neighborhoods">Jigjiga Neighborhoods</a></li>
           <li><a href="/moving-guide">Moving to Jigjiga</a></li>
@@ -410,12 +410,12 @@
         <span>Premier Rentals in the Somali Region</span>
       </div>
       <div class="legal-links">
-        <a href="/privacy">Privacy Policy</a>
-        <a href="/terms">Terms of Service</a>
-        <a href="/sitemap">Sitemap</a>
+        <a href="privacy.php">Privacy Policy</a>
+        <a href="terms.php">Terms of Service</a>
+        <a href="sitemap.php">Sitemap</a>
       </div>
       <div class="copyright">
-        &copy; 2023 <strong>Jigjiga Homes</strong>. All rights reserved.
+        &copy; 2025 <strong>Jigjiga Homes</strong>. All rights reserved.
       </div>
     </div>
   </div>

@@ -71,7 +71,9 @@ $reserved_properties = $stmt->get_result();
     </style>
 </head>
 <body>
-
+<?php
+require_once 'header.php';
+?>
 <div class="reserved-container">
     <h1>My Reserved Properties</h1>
 
@@ -95,6 +97,8 @@ $reserved_properties = $stmt->get_result();
         <p>You have no reserved properties.</p>
     <?php endif; ?>
 </div>
-
+<?php
+require_once 'footer.php';
+?>
 </body>
 </html>
