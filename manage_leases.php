@@ -1,130 +1,119 @@
 <?php
-include 'db_connection.php';
+$pageTitle = "Manage Leases";
+require_once 'db_connection.php';
+require_once 'admin_header.php';
+require_once 'admin_sidebar.php';
 
-// Fetch all leases with property title and tenant name
-$query = "
-SELECT leases.*, properties.title AS property_title, users.full_name AS tenant_name
-FROM leases
-JOIN properties ON leases.property_id = properties.property_id
-JOIN users ON leases.tenant_id = users.user_id
-ORDER BY leases.created_at DESC
+// Get leases with tenant and property info
+$leaseQuery = "
+    SELECT l.*, 
+           t.full_name as tenant_name, 
+           p.title as property_title,
+           p.price_per_month,
+           (SELECT COUNT(*) FROM invoices i WHERE i.lease_id = l.lease_id) as invoice_count
+    FROM leases l
+    JOIN users t ON l.tenant_id = t.user_id
+    JOIN properties p ON l.property_id = p.property_id
+    ORDER BY l.created_at DESC
 ";
-$result = mysqli_query($conn, $query);
+$leases = $conn->query($leaseQuery)->fetch_all(MYSQLI_ASSOC);
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Manage Leases</title>
-    <style>
-        :root {
-            --primary: #10B981;
-            --secondary: #FBBF24;
-            --accent: #06B6D4;
-            --dark: #1F2937;
-            --darker: #111827;
-            --text-light: rgba(255,255,255,0.9);
-            --text-muted: rgba(255,255,255,0.7);
-            --card-bg: rgba(31, 41, 55, 0.8);
-            --card-border: rgba(255, 255, 255, 0.15);
-        }
+<div class="main-content">
+    <div class="header">
+        <h1>Manage Leases</h1>
+        <a href="add_lease.php" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Create New Lease
+        </a>
+    </div>
 
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', sans-serif;
-            background: var(--darker);
-            color: var(--text-light);
-        }
-
-        .container {
-            padding: 2rem;
-        }
-
-        h1 {
-            text-align: center;
-            color: var(--primary);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-        }
-
-        th {
-            background-color: var(--dark);
-            color: var(--text-light);
-        }
-
-        tr:nth-child(even) {
-            background-color: rgba(255,255,255,0.02);
-        }
-
-        .btn {
-            padding: 6px 10px;
-            margin: 2px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            color: white;
-        }
-
-        .btn-edit { background-color: var(--accent); }
-        .btn-delete { background-color: crimson; }
-        .btn:hover {
-            opacity: 0.85;
-        }
-    </style>
-</head>
-<body>
-
-<div class="container">
-   
-
-    <table>
-        <thead>
-        <tr>
-            <th>Lease ID</th>
-            <th>Property</th>
-            <th>Tenant</th>
-            <th>Amount</th>
-            <th>Status</th>
-            <th>Start Date</th>
-            <th>End Date</th>
-            <th>Created At</th>
-            <th>Actions</th>
-        </tr>
-        </thead>
-        <tbody>
-        <?php while ($lease = mysqli_fetch_assoc($result)): ?>
-            <tr>
-                <td><?= $lease['lease_id'] ?></td>
-                <td><?= htmlspecialchars($lease['property_title']) ?></td>
-                <td><?= htmlspecialchars($lease['tenant_name']) ?></td>
-                <td>$<?= number_format($lease['monthly_rent'], 2) ?></td>
-                <td><?= ucfirst($lease['status']) ?></td>
-                <td><?= $lease['start_date'] ?></td>
-                <td><?= $lease['end_date'] ?></td>
-                <td><?= $lease['created_at'] ?></td>
-                <td>
-                    <a class="btn btn-edit" href="edit_lease.php?lease_id=<?= $lease['lease_id'] ?>">Edit</a>
-                    <a class="btn btn-delete" href="terminate_lease.php?lease_id=<?= $lease['lease_id'] ?>" onclick="return confirm('Are you sure you want to terminate this lease?')">Terminate</a>
-                </td>
-            </tr>
-        <?php endwhile; ?>
-        </tbody>
-    </table>
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">All Leases</h5>
+            <div class="filter-options">
+                <select class="form-select form-select-sm" id="leaseStatusFilter">
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="completed">Completed</option>
+                    <option value="terminated">Terminated</option>
+                    <option value="pending">Pending</option>
+                </select>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="leasesTable">
+                    <thead>
+                        <tr>
+                            <th>Lease ID</th>
+                            <th>Property</th>
+                            <th>Tenant</th>
+                            <th>Term</th>
+                            <th>Monthly Rent</th>
+                            <th>Invoices</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($leases as $lease): ?>
+                        <tr data-status="<?php echo $lease['status']; ?>">
+                            <td><?php echo substr($lease['lease_id'], 0, 8); ?></td>
+                            <td><?php echo htmlspecialchars($lease['property_title']); ?></td>
+                            <td><?php echo htmlspecialchars($lease['tenant_name']); ?></td>
+                            <td>
+                                <?php echo date('M j, Y', strtotime($lease['start_date'])); ?> - 
+                                <?php echo date('M j, Y', strtotime($lease['end_date'])); ?>
+                            </td>
+                            <td>$<?php echo number_format($lease['monthly_rent'], 2); ?></td>
+                            <td><?php echo $lease['invoice_count']; ?></td>
+                            <td>
+                                <span class="badge bg-<?php 
+                                    echo $lease['status'] === 'active' ? 'success' : 
+                                         ($lease['status'] === 'pending' ? 'warning' : 
+                                         ($lease['status'] === 'terminated' ? 'danger' : 'info')); 
+                                ?>">
+                                    <?php echo ucfirst($lease['status']); ?>
+                                </span>
+                            </td>
+                            <td><?php echo date('M j, Y', strtotime($lease['created_at'])); ?></td>
+                            <td>
+                                <a href="view_lease.php?id=<?php echo $lease['lease_id']; ?>" class="btn btn-sm btn-info">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="edit_lease.php?id=<?php echo $lease['lease_id']; ?>" class="btn btn-sm btn-warning">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <a href="generate_invoice.php?lease_id=<?php echo $lease['lease_id']; ?>" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-file-invoice"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 
-</body>
-</html>
+<script>
+$(document).ready(function() {
+    // Filter by status
+    $('#leaseStatusFilter').change(function() {
+        const status = $(this).val();
+        if (status) {
+            $('#leasesTable tbody tr').hide();
+            $(`#leasesTable tbody tr[data-status="${status}"]`).show();
+        } else {
+            $('#leasesTable tbody tr').show();
+        }
+    });
+});
+</script>
+
+<?php 
+require_once 'admin_footer.php';
+$conn->close();
+?>

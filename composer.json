@@ -1,0 +1,12 @@
+{
+    "name": "jigjigahomes/house-rental-system",
+    "description": "House Rental System with User Management",
+    "require": {
+        "dompdf/dompdf": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    }
+}

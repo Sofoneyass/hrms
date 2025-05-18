@@ -1,145 +1,153 @@
 <?php
-include 'db_connection.php'; 
+$pageTitle = "Manage Properties";
+require_once 'db_connection.php';
+require_once 'admin_header.php';
+require_once 'admin_sidebar.php';
 
-// Fetch all properties
-$query = "SELECT * FROM properties ORDER BY created_at DESC";
-$result = mysqli_query($conn, $query);
+// Get session messages
+$successMessage = $_SESSION['success_message'] ?? '';
+$errorMessage = $_SESSION['error_message'] ?? '';
+unset($_SESSION['success_message'], $_SESSION['error_message']);
+
+try {
+    // Get properties with owner info
+    $propertyQuery = "
+        SELECT p.*, u.full_name as owner_name 
+        FROM properties p
+        LEFT JOIN users u ON p.owner_id = u.user_id
+        ORDER BY p.created_at DESC
+    ";
+    $result = $conn->query($propertyQuery);
+    if (!$result) {
+        throw new Exception("Query failed: " . $conn->error);
+    }
+    $properties = $result->fetch_all(MYSQLI_ASSOC);
+} catch (Exception $e) {
+    $_SESSION['error_message'] = $e->getMessage();
+    $properties = [];
+}
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    
-    <style>
-        :root {
-            --primary: #10B981;
-            --secondary: #FBBF24;
-            --accent: #06B6D4;
-            --dark: #1F2937;
-            --darker: #111827;
-            --text-light: rgba(255,255,255,0.9);
-            --text-muted: rgba(255,255,255,0.7);
-            --card-bg: rgba(31, 41, 55, 0.8);
-            --card-border: rgba(255, 255, 255, 0.15);
-        }
+<div class="main-content">
+    <div class="header">
+        <h1>Manage Properties</h1>
+        <a href="add_property.php" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add New Property
+        </a>
+    </div>
 
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', sans-serif;
-            background: var(--darker);
-            color: var(--text-light);
-        }
+    <?php if ($successMessage): ?>
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <?php echo htmlspecialchars($successMessage); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php endif; ?>
+    <?php if ($errorMessage): ?>
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <?php echo htmlspecialchars($errorMessage); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php endif; ?>
 
-        .container {
-            padding: 2rem;
-        }
-
-        h1 {
-            text-align: center;
-            color: var(--primary);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-        }
-
-        th {
-            background-color: var(--dark);
-            color: var(--text-light);
-        }
-
-        tr:nth-child(even) {
-            background-color: rgba(255,255,255,0.02);
-        }
-
-        .btn {
-            padding: 6px 10px;
-            margin: 2px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            color: white;
-        }
-
-        .btn-success { background-color: var(--primary); }
-        .btn-danger { background-color: crimson; }
-        .btn-warning { background-color: var(--secondary); color: black; }
-        .btn-info { background-color: var(--accent); }
-
-        .btn:hover {
-            opacity: 0.85;
-        }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    
-
-    <table>
-        <thead>
-        <tr>
-            <th>Title</th>
-            <th>Owner ID</th>
-            <th>Price</th>
-            <th>Status</th>
-            <th>Created At</th>
-            <th>Actions</th>
-        </tr>
-        </thead>
-        <tbody>
-        <?php while($row = mysqli_fetch_assoc($result)): ?>
-            <tr>
-                <td><?= htmlspecialchars($row['title']) ?></td>
-                <td><?= $row['owner_id'] ?></td>
-                <td>$<?= number_format($row['price_per_month'], 2) ?></td>
-                <td><?= ucfirst($row['status']) ?></td>
-                <td><?= $row['created_at'] ?></td>
-                <td>
-                    <button class="btn btn-success" onclick="approveProperty(<?= $row['property_id'] ?>)">Approve</button>
-                    <button class="btn btn-danger" onclick="rejectProperty(<?= $row['property_id'] ?>)">Reject</button>
-                    
-                    <button class="btn btn-info" onclick="viewReport(<?= $row['property_id'] ?>)">View Report</button>
-                </td>
-            </tr>
-        <?php endwhile; ?>
-        </tbody>
-    </table>
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">All Properties</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Title</th>
+                            <th>Location</th>
+                            <th>Owner</th>
+                            <th>Bed/Bath</th>
+                            <th>Price</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if ($properties): ?>
+                            <?php foreach ($properties as $property): ?>
+                            <tr>
+                                <td><?php echo substr($property['property_id'], 0, 8); ?></td>
+                                <td><?php echo htmlspecialchars($property['title']); ?></td>
+                                <td><?php echo htmlspecialchars($property['location']); ?></td>
+                                <td><?php echo htmlspecialchars($property['owner_name'] ?? 'N/A'); ?></td>
+                                <td><?php echo $property['bedrooms']; ?> / <?php echo $property['bathrooms']; ?></td>
+                                <td>$<?php echo number_format($property['price_per_month'], 2); ?></td>
+                                <td>
+                                    <span class="badge bg-<?php 
+                                        echo $property['status'] === 'available' ? 'success' : 
+                                             ($property['status'] === 'rented' ? 'primary' : 
+                                             ($property['status'] === 'under_maintenance' ? 'warning' : 'secondary')); 
+                                    ?>">
+                                        <?php echo ucfirst($property['status']); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="view_property.php?id=<?php echo $property['property_id']; ?>" class="btn btn-sm btn-info">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="edit_property.php?id=<?php echo $property['property_id']; ?>" class="btn btn-sm btn-warning">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-danger delete-property" 
+                                            data-id="<?php echo $property['property_id']; ?>" 
+                                            data-title="<?php echo htmlspecialchars($property['title']); ?>">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr><td colspan="8" class="text-center">No properties found.</td></tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deletePropertyModal" tabindex="-1" aria-labelledby="deletePropertyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deletePropertyModalLabel">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete <strong id="deletePropertyTitle"></strong>? This action cannot be undone.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deletePropertyForm" method="POST" action="delete_property.php">
+                    <input type="hidden" name="property_id" id="deletePropertyId">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
 <script>
-    function approveProperty(id) {
-        if (confirm("Are you sure you want to approve this property?")) {
-            window.location.href = 'property_actions.php?action=approve&id=' + id;
-        }
-    }
-
-    function rejectProperty(id) {
-        if (confirm("Are you sure you want to reject this property?")) {
-            window.location.href = 'property_actions.php?action=reject&id=' + id;
-        }
-    }
-
-    function editProperty(id) {
-        window.location.href = 'edit_property.php?property_id=' + id;
-    }
-
-    function viewReport(id) {
-        window.location.href = 'property_report.php?property_id=' + id;
-    }
+$(document).ready(function() {
+    $('.delete-property').click(function() {
+        const propertyId = $(this).data('id');
+        const propertyTitle = $(this).data('title');
+        $('#deletePropertyTitle').text(propertyTitle);
+        $('#deletePropertyId').val(propertyId);
+        $('#deletePropertyModal').modal('show');
+    });
+});
 </script>
 
-</body>
-</html>
+<?php 
+require_once 'admin_footer.php';
+$conn->close();
+?>

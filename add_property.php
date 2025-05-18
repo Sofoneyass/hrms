@@ -1,255 +1,314 @@
 <?php
+$pageTitle = "Add Property";
+require_once 'db_connection.php';
+require_once 'admin_header.php';
 
 
-// Only owners can access this page
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'owner') {
-    header("Location: login.php");
-    exit();
+$errors = [];
+$successMessage = '';
+$title = $description = $location = $address_detail = $owner_id = $bedrooms = $bathrooms = $price_per_month = $status = $kebele = $zone = '';
+$amenities = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $title = trim($_POST['title'] ?? '');
+    $description = trim($_POST['description'] ?? '');
+    $location = trim($_POST['location'] ?? '');
+    $address_detail = trim($_POST['address_detail'] ?? '');
+    $owner_id = trim($_POST['owner_id'] ?? '');
+    $bedrooms = trim($_POST['bedrooms'] ?? '');
+    $bathrooms = trim($_POST['bathrooms'] ?? '');
+    $price_per_month = trim($_POST['price_per_month'] ?? '');
+    $status = trim($_POST['status'] ?? '');
+    $kebele = trim($_POST['kebele'] ?? '');
+    $zone = trim($_POST['zone'] ?? '');
+    $amenities = array_filter(array_map('trim', $_POST['amenities'] ?? []));
+
+    // Validation
+    if (!$title) $errors[] = "Title is required.";
+    if (strlen($title) > 100) $errors[] = "Title must be 100 characters or less.";
+    if (!$location) $errors[] = "Location is required.";
+    if (strlen($location) > 255) $errors[] = "Location must be 255 characters or less.";
+    if ($address_detail && strlen($address_detail) > 255) $errors[] = "Address detail must be 255 characters or less.";
+    if (!$owner_id) $errors[] = "Owner is required.";
+    if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $owner_id)) {
+        $errors[] = "Invalid owner ID format.";
+    }
+    if (!is_numeric($bedrooms) || $bedrooms < 0) $errors[] = "Valid number of bedrooms is required.";
+    if (!is_numeric($bathrooms) || $bathrooms < 0) $errors[] = "Valid number of bathrooms is required.";
+    if (!is_numeric($price_per_month) || $price_per_month <= 0) $errors[] = "Valid price is required.";
+    if (!in_array($status, ['available', 'reserved', 'rented', 'under_maintenance'])) $errors[] = "Invalid status.";
+    if ($kebele && strlen($kebele) > 100) $errors[] = "Kebele must be 100 characters or less.";
+    if ($zone && strlen($zone) > 100) $errors[] = "Zone must be 100 characters or less.";
+    foreach ($amenities as $amenity) {
+        if (strlen($amenity) > 100) $errors[] = "Each amenity name must be 100 characters or less.";
+    }
+
+    // Image upload
+    $photo_urls = [];
+    if (!empty($_FILES['images']['name'][0])) {
+        $allowed = ['jpg', 'jpeg', 'png'];
+        foreach ($_FILES['images']['name'] as $index => $name) {
+            if (!$name) continue;
+            $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowed)) {
+                $errors[] = "Only JPG, JPEG, PNG files are allowed for images.";
+            } elseif ($_FILES['images']['size'][$index] > 5 * 1024 * 1024) {
+                $errors[] = "Each image must be less than 5MB.";
+            } else {
+                $filename = 'property_' . uniqid() . '.' . $ext;
+                $uploadPath = 'Uploads/' . $filename;
+                if (move_uploaded_file($_FILES['images']['tmp_name'][$index], $uploadPath)) {
+                    $photo_urls[] = $filename;
+                } else {
+                    $errors[] = "Failed to upload image: $name.";
+                }
+            }
+        }
+    }
+
+    if (!$errors) {
+        try {
+            // Start transaction
+            $conn->begin_transaction();
+
+            // Insert property
+           // Generate UUID in PHP
+$property_id = bin2hex(random_bytes(16)); // or use a library for a real UUID v4
+
+// Format like a standard UUID: 8-4-4-4-12
+$property_id = substr($property_id, 0, 8) . '-' .
+               substr($property_id, 8, 4) . '-' .
+               substr($property_id, 12, 4) . '-' .
+               substr($property_id, 16, 4) . '-' .
+               substr($property_id, 20, 12);
+
+// Prepare insert with manually set UUID
+$stmt = $conn->prepare("
+    INSERT INTO properties (property_id, title, description, location, address_detail, owner_id, bedrooms, bathrooms, price_per_month, status, kebele, zone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+");
+if (!$stmt) {
+    throw new Exception("Prepare failed: " . $conn->error);
 }
 
-// Get success/error messages from session
-$success = $_SESSION['success'] ?? '';
-$error = $_SESSION['error'] ?? '';
+$stmt->bind_param("ssssssiiisss", $property_id, $title, $description, $location, $address_detail, $owner_id, $bedrooms, $bathrooms, $price_per_month, $status, $kebele, $zone);
+$stmt->execute();
+$stmt->close();
 
-// Clear session messages
-unset($_SESSION['success'], $_SESSION['error']);
+
+            if (!$property_id) {
+                throw new Exception("Failed to retrieve property ID.");
+            }
+
+            // Insert photos
+            if ($photo_urls) {
+                $stmt = $conn->prepare("INSERT INTO property_photos (photo_id, property_id, photo_url) VALUES (UUID(), ?, ?)");
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . $conn->error);
+                }
+                foreach ($photo_urls as $photo_url) {
+                    $stmt->bind_param("ss", $property_id, $photo_url);
+                    $stmt->execute();
+                }
+                $stmt->close();
+            }
+
+            // Insert amenities
+            if ($amenities) {
+                $stmt = $conn->prepare("INSERT INTO amenities (amenity_id, property_id, name) VALUES (UUID(), ?, ?)");
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . $conn->error);
+                }
+                foreach ($amenities as $amenity) {
+                    $stmt->bind_param("ss", $property_id, $amenity);
+                    $stmt->execute();
+                }
+                $stmt->close();
+            }
+
+            // Commit transaction
+            $conn->commit();
+            $_SESSION['success_message'] = "Property added successfully.";
+            header("Location: manage_properties.php");
+            exit;
+        } catch (Exception $e) {
+            $conn->rollback();
+            $errors[] = "Error adding property: " . $e->getMessage();
+        }
+    }
+}
+
+// Fetch owners
+try {
+    $owners = $conn->query("SELECT user_id, full_name FROM users WHERE role = 'owner' ORDER BY full_name")->fetch_all(MYSQLI_ASSOC);
+} catch (Exception $e) {
+    $errors[] = "Error fetching owners: " . $e->getMessage();
+    $owners = [];
+}
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Add Property | JIGJIGAHOMES</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #2a7f62;
-            --secondary: #f0c14b;
-            --accent: #e2b33a;
-            --dark: #1e3c2b;
-            --text-light: #fff;
-            --text-muted: rgba(255, 255, 255, 0.7);
-            --card-bg: rgba(255, 255, 255, 0.1);
-            --card-border: rgba(255, 255, 255, 0.15);
-            --glass-blur: blur(10px);
-            --shadow-depth: 0 10px 30px rgba(0, 0, 0, 0.2);
-            --hover-shadow: 0 5px 15px rgba(240, 193, 75, 0.3);
-            --transition-fast: all 0.3s ease;
-        }
 
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e3c2b 0%, #2a7f62 100%);
-            color: var(--text-light);
-            min-height: 100vh;
-        }
+<div class="main-content">
+    <div class="header">
+        <h1>Add New Property</h1>
+        <a href="manage_properties.php" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back</a>
+    </div>
 
-        .main-content {
-            margin-left: 270px;
-            padding: 20px;
-        }
+    <?php if ($errors): ?>
+    <div class="alert alert-danger">
+        <?php echo implode("<br>", array_map('htmlspecialchars', $errors)); ?>
+    </div>
+    <?php endif; ?>
 
-        .form-container {
-            max-width: 700px;
-            margin: 40px auto;
-            background: var(--card-bg);
-            backdrop-filter: var(--glass-blur);
-            border: 1px solid var(--card-border);
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: var(--shadow-depth);
-            transition: var(--transition-fast);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .form-container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: var(--secondary);
-        }
-
-        .form-container:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--hover-shadow);
-        }
-
-        .form-container h2 {
-            text-align: center;
-            margin-bottom: 25px;
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--text-light);
-            position: relative;
-            padding-bottom: 10px;
-        }
-
-        .form-container h2::after {
-            content: '';
-            position: absolute;
-            left: 50%;
-            bottom: 0;
-            transform: translateX(-50%);
-            width: 40px;
-            height: 2px;
-            background: var(--secondary);
-        }
-
-        .form-container form {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .form-container input,
-        .form-container textarea,
-        .form-container select {
-            width: 100%;
-            padding: 12px 15px;
-            border-radius: 6px;
-            border: 1px solid var(--card-border);
-            background: rgba(255, 255, 255, 0.9);
-            color: var(--dark);
-            font-size: 16px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            transition: var(--transition-fast);
-        }
-
-        .form-container input:focus,
-        .form-container textarea:focus,
-        .form-container select:focus {
-            outline: none;
-            border-color: var(--secondary);
-            background: #fff;
-        }
-
-        .form-container textarea {
-            resize: vertical;
-            min-height: 100px;
-        }
-
-        .form-container input::placeholder,
-        .form-container textarea::placeholder {
-            color: rgba(30, 60, 43, 0.7);
-        }
-
-        .form-container button {
-            width: 100%;
-            padding: 12px;
-            background: var(--secondary);
-            color: var(--dark);
-            font-size: 16px;
-            font-weight: 600;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: var(--transition-fast);
-        }
-
-        .form-container button:hover {
-            background: var(--accent);
-            transform: translateY(-2px);
-            box-shadow: var(--hover-shadow);
-        }
-
-        .message {
-            text-align: center;
-            font-size: 16px;
-            margin: 20px 0;
-            padding: 12px;
-            border-radius: 6px;
-        }
-
-        .success {
-            background: rgba(34, 197, 94, 0.2);
-            color: #22c55e;
-        }
-
-        .error {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        @media (max-width: 768px) {
-            .main-content {
-                margin-left: 220px;
-            }
-
-            .form-container {
-                margin: 20px;
-                padding: 20px;
-            }
-
-            .form-container h2 {
-                font-size: 24px;
-            }
-
-            .form-container input,
-            .form-container textarea,
-            .form-container select,
-            .form-container button {
-                font-size: 14px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .main-content {
-                margin-left: 0;
-                padding: 15px;
-            }
-
-            .form-container {
-                margin: 15px;
-                padding: 15px;
-            }
-
-            .form-container h2 {
-                font-size: 20px;
-            }
-        }
-    </style>
-</head>
-<body>
-    <?php include 'sidebar.php'; ?>
-    <div class="main-content" id="main-content">
-        <div class="form-container">
-            <h2>Add New Property</h2>
-            <?php if (!empty($success)): ?>
-                <div class="message success"><?php echo htmlspecialchars($success); ?></div>
-            <?php endif; ?>
-            <?php if (!empty($error)): ?>
-                <div class="message error"><?php echo htmlspecialchars($error); ?></div>
-            <?php endif; ?>
-            <form method="POST" action="add_property_handler.php" enctype="multipart/form-data">
-                <select name="title" required>
-                    <option value="">Select Property Title</option>
-                    <option value="condo">Condo</option>
-                    <option value="apartment">Apartment</option>
-                    <option value="villa">Villa</option>
-                </select>
-                <textarea name="description" placeholder="Property Description"></textarea>
-                <input type="text" name="location" placeholder="City/Location" required>
-                <input type="text" name="zone" placeholder="Zone" required>
-                <input type="text" name="kebele" placeholder="Kebele" required>
-                <input type="text" name="address_detail" placeholder="Detailed Address">
-                <input type="number" name="bedrooms" placeholder="Number of Bedrooms" min="0" required>
-                <input type="number" name="bathrooms" placeholder="Number of Bathrooms" min="0" required>
-                <input type="number" step="0.01" name="price_per_month" placeholder="Price Per Month" min="0" required>
-                <select name="status" required>
-                    <option value="available">Available</option>
-                    <option value="reserved">Reserved</option>
-                    <option value="rented">Rented</option>
-                    <option value="under_maintenance">Under Maintenance</option>
-                </select>
-                <input type="file" name="property_image" accept="image/jpeg,image/png,image/gif">
-                <button type="submit">Add Property</button>
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data" id="addPropertyForm">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="title" class="form-label">Title *</label>
+                        <input type="text" class="form-control" id="title" name="title" value="<?php echo htmlspecialchars($title); ?>" maxlength="100" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="location" class="form-label">Location *</label>
+                        <input type="text" class="form-control" id="location" name="location" value="<?php echo htmlspecialchars($location); ?>" maxlength="255" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="4"><?php echo htmlspecialchars($description); ?></textarea>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="address_detail" class="form-label">Address Detail</label>
+                        <input type="text" class="form-control" id="address_detail" name="address_detail" value="<?php echo htmlspecialchars($address_detail); ?>" maxlength="255">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="owner_id" class="form-label">Owner *</label>
+                        <select class="form-select" id="owner_id" name="owner_id" required>
+                            <option value="">Select Owner</option>
+                            <?php foreach ($owners as $owner): ?>
+                            <option value="<?php echo $owner['user_id']; ?>" <?php echo $owner_id === $owner['user_id'] ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($owner['full_name']); ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="bedrooms" class="form-label">Bedrooms *</label>
+                        <input type="number" class="form-control" id="bedrooms" name="bedrooms" value="<?php echo htmlspecialchars($bedrooms); ?>" min="0" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="bathrooms" class="form-label">Bathrooms *</label>
+                        <input type="number" class="form-control" id="bathrooms" name="bathrooms" value="<?php echo htmlspecialchars($bathrooms); ?>" min="0" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="price_per_month" class="form-label">Price per Month ($) *</label>
+                        <input type="number" class="form-control" id="price_per_month" name="price_per_month" value="<?php echo htmlspecialchars($price_per_month); ?>" min="0.01" step="0.01" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="status" class="form-label">Status *</label>
+                        <select class="form-select" id="status" name="status" required>
+                            <option value="available" <?php echo $status === 'available' ? 'selected' : ''; ?>>Available</option>
+                            <option value="reserved" <?php echo $status === 'reserved' ? 'selected' : ''; ?>>Reserved</option>
+                            <option value="rented" <?php echo $status === 'rented' ? 'selected' : ''; ?>>Rented</option>
+                            <option value="under_maintenance" <?php echo $status === 'under_maintenance' ? 'selected' : ''; ?>>Under Maintenance</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="kebele" class="form-label">Kebele</label>
+                        <input type="text" class="form-control" id="kebele" name="kebele" value="<?php echo htmlspecialchars($kebele); ?>" maxlength="100">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="zone" class="form-label">Zone</label>
+                        <input type="text" class="form-control" id="zone" name="zone" value="<?php echo htmlspecialchars($zone); ?>" maxlength="100">
+                    </div>
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label">Images (Max 5, JPG/PNG, <5MB each)</label>
+                        <input type="file" class="form-control" id="images" name="images[]" multiple accept="image/jpeg,image/png">
+                        <small class="form-text text-muted">Hold Ctrl to select multiple images.</small>
+                        <div id="imagePreview" class="mt-2"></div>
+                    </div>
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label">Amenities</label>
+                        <div id="amenitiesContainer">
+                            <div class="input-group mb-2">
+                                <input type="text" class="form-control" name="amenities[]" placeholder="e.g., Wi-Fi, Parking" maxlength="100">
+                                <button type="button" class="btn btn-outline-danger remove-amenity">Remove</button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary" id="addAmenity">Add Amenity</button>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Property</button>
             </form>
         </div>
     </div>
-</body>
-</html>
+</div>
+
+<script>
+document.getElementById('addPropertyForm').addEventListener('submit', function(e) {
+    const price = document.getElementById('price_per_month').value;
+    if (price <= 0) {
+        e.preventDefault();
+        alert('Price per month must be greater than 0.');
+    }
+    const images = document.getElementById('images').files;
+    if (images.length > 5) {
+        e.preventDefault();
+        alert('You can upload a maximum of 5 images.');
+    }
+});
+
+document.getElementById('addAmenity').addEventListener('click', function() {
+    const container = document.getElementById('amenitiesContainer');
+    const div = document.createElement('div');
+    div.className = 'input-group mb-2';
+    div.innerHTML = `
+        <input type="text" class="form-control" name="amenities[]" placeholder="e.g., Wi-Fi, Parking" maxlength="100">
+        <button type="button" class="btn btn-outline-danger remove-amenity">Remove</button>
+    `;
+    container.appendChild(div);
+});
+
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('remove-amenity')) {
+        if (document.querySelectorAll('#amenitiesContainer .input-group').length > 1) {
+            e.target.closest('.input-group').remove();
+        }
+    }
+});
+
+document.getElementById('images').addEventListener('change', function(e) {
+    const preview = document.getElementById('imagePreview');
+    preview.innerHTML = '';
+    const files = e.target.files;
+    if (files.length > 5) {
+        alert('You can upload a maximum of 5 images.');
+        e.target.value = '';
+        return;
+    }
+    for (const file of files) {
+        if (!['image/jpeg', 'image/png'].includes(file.type)) {
+            alert('Only JPG and PNG images are allowed.');
+            e.target.value = '';
+            preview.innerHTML = '';
+            return;
+        }
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.style.maxWidth = '100px';
+        img.style.margin = '5px';
+        preview.appendChild(img);
+    }
+});
+</script>
+
+<style>
+#imagePreview img {
+    max-height: 100px;
+    object-fit: cover;
+    border-radius: 5px;
+}
+</style>
+
+<?php 
+require_once 'admin_footer.php';
+$conn->close();
+?>
