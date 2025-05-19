@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 17, 2025 at 08:31 AM
+-- Generation Time: May 19, 2025 at 09:21 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -269,6 +269,24 @@ CREATE TABLE `reviews` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `system_settings`
+--
+
+CREATE TABLE `system_settings` (
+  `id` char(36) NOT NULL DEFAULT uuid(),
+  `site_name` varchar(255) NOT NULL DEFAULT 'JIGJIGAHOMES',
+  `currency` varchar(3) NOT NULL DEFAULT 'ETB',
+  `timezone` varchar(50) NOT NULL DEFAULT 'Africa/Addis_Ababa',
+  `maintenance_mode` tinyint(1) NOT NULL DEFAULT 0,
+  `chapa_api_key` varchar(255) DEFAULT NULL,
+  `paypal_client_id` varchar(255) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `testimonials`
 --
 
@@ -428,6 +446,12 @@ ALTER TABLE `reviews`
   ADD PRIMARY KEY (`review_id`),
   ADD KEY `tenant_id` (`tenant_id`),
   ADD KEY `property_id` (`property_id`);
+
+--
+-- Indexes for table `system_settings`
+--
+ALTER TABLE `system_settings`
+  ADD PRIMARY KEY (`id`);
 
 --
 -- Indexes for table `testimonials`

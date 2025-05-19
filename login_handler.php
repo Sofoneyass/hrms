@@ -14,10 +14,7 @@ require_once 'db_connection.php';
 
 // Function to log activity
 function logActivity($conn, $user_id, $activity_type, $description, $ip_address) {
-    // If user_id is invalid (e.g., string, null, or not in DB), skip logging to prevent crash
-    if (!is_numeric($user_id)) {
-        $user_id = null;
-    }
+    $user_id = (is_numeric($user_id) && intval($user_id) > 0) ? intval($user_id) : null;
 
     if ($user_id === null) {
         $stmt = $conn->prepare("INSERT INTO activity_logs (user_id, activity_type, description, ip_address, created_at) VALUES (NULL, ?, ?, ?, NOW())");
