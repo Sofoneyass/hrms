@@ -9,14 +9,28 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'tenant') {
 
 $tenant_id = $_SESSION['user_id'];
 
+// Clean up: Expire old reservations older than 3 days
+$conn->query("
+    UPDATE bookings SET status = 'expired'
+    WHERE status = 'pending' AND booking_date < (NOW() - INTERVAL 3 DAY)
+");
+
+$conn->query("
+    UPDATE properties SET status = 'available'
+    WHERE property_id IN (
+        SELECT property_id FROM bookings
+        WHERE status = 'expired'
+    )
+");
+
+// Validate property ID
 if (!isset($_GET['property_id'])) {
     die("Property ID is required.");
 }
 $property_id = intval($_GET['property_id']);
 
-
-// Fetch property info
-$property_sql = "SELECT * FROM properties WHERE property_id=? AND status='reserved'";
+// Fetch reserved property
+$property_sql = "SELECT * FROM properties WHERE property_id = ? AND status = 'reserved'";
 $property_stmt = $conn->prepare($property_sql);
 if (!$property_stmt) {
     die("Prepare failed: " . $conn->error);
@@ -27,11 +41,23 @@ $property_result = $property_stmt->get_result();
 $property = $property_result->fetch_assoc();
 
 if (!$property) {
-    die("Property not found or not reserved.");
+    die("Property not found or not currently reserved.");
 }
 
 // Handle booking submission
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Check if already booked by the same tenant
+    $check_sql = "SELECT * FROM bookings WHERE tenant_id = ? AND property_id = ? AND status = 'pending'";
+    $check_stmt = $conn->prepare($check_sql);
+    $check_stmt->bind_param("ii", $tenant_id, $property_id);
+    $check_stmt->execute();
+    $existing = $check_stmt->get_result();
+
+    if ($existing->num_rows > 0) {
+        echo "<script>alert('You have already submitted a booking for this property.'); window.location.href='tenant_dashboard.php';</script>";
+        exit();
+    }
+
     $booking_date = date("Y-m-d");
     $status = 'pending';
 
@@ -43,7 +69,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     $insert_stmt->bind_param("iiss", $property_id, $tenant_id, $booking_date, $status);
     if ($insert_stmt->execute()) {
-        echo "<script>alert('Booking request submitted successfully!'); window.location.href='tenant_dashboard.php';</script>";
+        echo "<script>alert('Booking request submitted successfully! It will expire in 3 days if not confirmed.'); window.location.href='tenant_dashboard.php';</script>";
         exit();
     } else {
         echo "Booking failed: " . $insert_stmt->error;
@@ -78,7 +104,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </div>
 
     <form method="post">
-        <p>Click below to request a booking for this property.</p>
+        <p>Note: Booking will expire in <strong>3 days</strong> if not confirmed.</p>
         <button type="submit">Confirm Booking</button>
     </form>
 </div>

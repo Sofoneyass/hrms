@@ -13,18 +13,22 @@ $error_message = "";
 $success_message = "";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $title = $_POST['title'];
-    $address = $_POST['location'];
-    $description = $_POST['description'];
+    $title = trim($_POST['title']);
+    $location = trim($_POST['location']);
+    $kebele = trim($_POST['kebele']);
+    $zone = trim($_POST['zone']);
+    $address_detail = trim($_POST['address_detail']);
+    $description = trim($_POST['description']);
     $price_per_month = $_POST['price_per_month'];
-    $property_type = $_POST['property_type'];
     $bedrooms = $_POST['bedrooms'];
     $bathrooms = $_POST['bathrooms'];
-    $amenities = isset($_POST['amenities']) ? implode(',', $_POST['amenities']) : '';
+    $amenities = isset($_POST['amenities']) ? $_POST['amenities'] : [];
     $status = $_POST['status'];
 
     // Validate inputs
-    if (!is_numeric($price_per_month) || $price_per_month < 0) {
+    if (empty($title) || empty($location) || empty($kebele)) {
+        $error_message = "Title, location (wereda), and kebele are required.";
+    } elseif (!is_numeric($price_per_month) || $price_per_month < 0) {
         $error_message = "Invalid price per month.";
     } elseif (!is_numeric($bedrooms) || !is_numeric($bathrooms) || $bedrooms < 0 || $bathrooms < 0) {
         $error_message = "Invalid bedrooms or bathrooms count.";
@@ -54,7 +58,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Check file size (500KB)
             if ($_FILES["image"]["size"] > 500000) {
                 $error_message .= " File is too large.";
-                $uploadOK = 0;
+                $uploadOk = 0;
             }
 
             // Allow certain file formats
@@ -70,33 +74,70 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $uploadOk = 0;
             }
 
+            if ($uploadOk && !move_uploaded_file($_FILES["image"]["tmp_name"], $target_file)) {
+                $error_message .= " Error uploading file.";
+                $uploadOk = 0;
+            }
+
             if ($uploadOk) {
-                if (move_uploaded_file($_FILES["image"]["tmp_name"], $target_file)) {
-                    $image_path = $target_file;
-                } else {
-                    $error_message .= " Error uploading file.";
-                    $uploadOk = 0;
-                }
+                $image_path = $target_file;
             }
         }
 
         if (!$error_message) {
-            // Insert property with UUID
-            $query = "INSERT INTO properties (property_id, owner_id, title, address, description, price_per_month, 
-                      property_type, bedrooms, bathrooms, amenities, status, image) 
-                      VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            $stmt = $conn->prepare($query);
-            $stmt->bind_param("sssssssssss", $owner_id, $title, $address, $description, $price_per_month, 
-                             $property_type, $bedrooms, $bathrooms, $amenities, $status, $image_path);
+            // Start transaction
+            $conn->begin_transaction();
 
-            if ($stmt->execute()) {
+            try {
+                // Insert property
+                $query = "INSERT INTO properties (property_id, owner_id, title, description, location, address_detail, 
+                          bedrooms, bathrooms, price_per_month, status, kebele, zone) 
+                          VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                $stmt = $conn->prepare($query);
+                $stmt->bind_param("ssssiidssss", $owner_id, $title, $description, $location, $address_detail, 
+                                 $bedrooms, $bathrooms, $price_per_month, $status, $kebele, $zone);
+                $stmt->execute();
+                $property_id = $conn->insert_id; // Note: UUID is used, so insert_id may not apply; fetch UUID instead
+                $stmt->close();
+
+                // Fetch generated property_id
+                $query = "SELECT property_id FROM properties WHERE owner_id = ? AND title = ? AND created_at = (SELECT MAX(created_at) FROM properties WHERE owner_id = ?)";
+                $stmt = $conn->prepare($query);
+                $stmt->bind_param("sss", $owner_id, $title, $owner_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $property_id = $result->fetch_assoc()['property_id'];
+                $stmt->close();
+
+                // Insert amenities
+                if (!empty($amenities)) {
+                    $query = "INSERT INTO amenities (property_id, name) VALUES (?, ?)";
+                    $stmt = $conn->prepare($query);
+                    foreach ($amenities as $amenity) {
+                        $stmt->bind_param("ss", $property_id, $amenity);
+                        $stmt->execute();
+                    }
+                    $stmt->close();
+                }
+
+                // Insert photo
+                if ($image_path) {
+                    $query = "INSERT INTO property_photos (property_id, photo_url) VALUES (?, ?)";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("ss", $property_id, $image_path);
+                    $stmt->execute();
+                    $stmt->close();
+                }
+
+                // Commit transaction
+                $conn->commit();
                 $_SESSION['success_message'] = "Property added successfully!";
-                header("Location: manage_properties.php");
+                header("Location: my_properties.php");
                 exit;
-            } else {
-                $error_message = "Error adding property: " . $stmt->error;
+            } catch (Exception $e) {
+                $conn->rollback();
+                $error_message = "Error adding property: " . $e->getMessage();
             }
-            $stmt->close();
         }
     }
 }
@@ -110,7 +151,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Add Property - JIGJIGAHOMES</title>
     <style>
         * {
-            margin:  کاهشم0;
+            margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: 'Segoe UI', sans-serif;
@@ -255,6 +296,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         .checkbox-group {
             display: flex;
             gap: 15px;
+            flex-wrap: wrap;
         }
 
         .submit-btn {
@@ -264,14 +306,30 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            transition: background 0.3s;
         }
 
-        .error { color: #FF6347; margin-bottom: 15px; }
-        .success { color: #4CAF50; margin-bottom: 15px; }
+        .submit-btn:hover {
+            background: #e6c200;
+        }
+
+        .error {
+            color: #FF6347;
+            margin-bottom: 15px;
+        }
+
+        .success {
+            color: #4CAF50;
+            margin-bottom: 15px;
+        }
 
         @media (max-width: 768px) {
-            .sidebar { width: 200px; }
-            .main-content { margin-left: 200px; }
+            .sidebar {
+                width: 200px;
+            }
+            .main-content {
+                margin-left: 200px;
+            }
         }
 
         @media (max-width: 600px) {
@@ -281,9 +339,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 transform: translateX(-100%);
                 transition: transform 0.3s;
             }
-            .sidebar.active { transform: translateX(0); }
-            .main-content { margin-left: 0; }
-            .header { position: relative; }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .header {
+                position: relative;
+            }
             .menu-toggle {
                 display: block;
                 cursor: pointer;
@@ -308,7 +372,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <span class="menu-toggle" onclick="toggleSidebar()">☰</span>
             <h1>Add Property</h1>
             <div class="profile-dropdown">
-                <button class="profile-btn">Profile</button>
+                <button class="profile-btn" aria-label="Profile menu">Profile</button>
                 <div class="dropdown-content">
                     <a href="profile.php">Edit Profile</a>
                     <a href="logout.php">Logout</a>
@@ -328,47 +392,54 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <input type="text" name="title" required>
                 </div>
                 <div class="form-group">
-                    <label>Address</label>
-                    <input type="text" name="address" required>
+                    <label>Location (Wereda)</label>
+                    <input type="text" name="location" required>
+                </div>
+                <div class="form-group">
+                    <label>Kebele</label>
+                    <input type="text" name="kebele" required>
+                </div>
+                <div class="form-group">
+                    <label>Zone</label>
+                    <input type="text" name="zone">
+                </div>
+                <div class="form-group">
+                    <label>Address Details</label>
+                    <input type="text" name="address_detail">
                 </div>
                 <div class="form-group">
                     <label>Description</label>
                     <textarea name="description" required></textarea>
                 </div>
                 <div class="form-group">
-                    <label>Price per Month</label>
-                    <input type="number" name="price_per_month" required>
-                </div>
-                <div class="form-group">
-                    <label>Property Type</label>
-                    <select name="property_type" required>
-                        <option value="Apartment">Apartment</option>
-                        <option value="House">House</option>
-                        <option value="Condo">Condo</option>
-                    </select>
+                    <label>Price per Month (ETB)</label>
+                    <input type="number" name="price_per_month" min="0" step="0.01" required>
                 </div>
                 <div class="form-group">
                     <label>Bedrooms</label>
-                    <input type="number" name="bedrooms" required>
+                    <input type="number" name="bedrooms" min="0" required>
                 </div>
                 <div class="form-group">
                     <label>Bathrooms</label>
-                    <input type="number" name="bathrooms" required>
+                    <input type="number" name="bathrooms" min="0" required>
                 </div>
                 <div class="form-group">
                     <label>Amenities</label>
                     <div class="checkbox-group">
-                        <label><input type="checkbox" name="amenities[]" value="WiFi">WiFi</label>
-                        <label><input type="checkbox" name="amenities[]" value="Parking">Parking</label>
-                        <label><input type="checkbox" name="amenities[]" value="Pool">Pool</label>
+                        <label><input type="checkbox" name="amenities[]" value="WiFi"> WiFi</label>
+                        <label><input type="checkbox" name="amenities[]" value="Parking"> Parking</label>
+                        <label><input type="checkbox" name="amenities[]" value="Pool"> Pool</label>
+                        <label><input type="checkbox" name="amenities[]" value="Gym"> Gym</label>
+                        <label><input type="checkbox" name="amenities[]" value="Security"> Security</label>
                     </div>
                 </div>
                 <div class="form-group">
                     <label>Status</label>
                     <select name="status" required>
-                        <option value="Available">Available</option>
-                        <option value="Rented">Rented</option>
-                        <option value="Maintenance">Maintenance</option>
+                        <option value="available">Available</option>
+                        <option value="reserved">Reserved</option>
+                        <option value="rented">Rented</option>
+                        <option value="under_maintenance">Under Maintenance</option>
                     </select>
                 </div>
                 <div class="form-group">

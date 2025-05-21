@@ -1,92 +1,61 @@
 <?php
 session_start();
-header('Content-Type: application/json');
 require_once 'db_connection.php';
 
-// Check if user is logged in and is a tenant
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'tenant') {
-    echo json_encode(['success' => false, 'message' => 'You must be logged in as a tenant to favorite properties.']);
+header('Content-Type: application/json');
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode(['success' => false, 'message' => 'Invalid request method']);
     exit;
 }
 
-$user_id = $_SESSION['user_id'];
+$input = json_decode(file_get_contents('php://input'), true);
+$property_id = $input['property_id'] ?? null;
+$csrf_token = $input['csrf_token'] ?? null;
+$tenant_id = $_SESSION['user_id'] ?? null;
 
-// Get request data
-$data = json_decode(file_get_contents('php://input'), true);
-$property_id = $data['property_id'] ?? null;
-$csrf_token = $data['csrf_token'] ?? null;
-
-// Validate CSRF token
-if (!$csrf_token || $csrf_token !== $_SESSION['csrf_token']) {
-    echo json_encode(['success' => false, 'message' => 'Invalid CSRF token.']);
+if (!$tenant_id || !$property_id || !$csrf_token) {
+    echo json_encode(['success' => false, 'message' => 'Missing required fields']);
     exit;
 }
 
-// Validate property ID
-if (!is_numeric($property_id) || $property_id <= 0) {
-    echo json_encode(['success' => false, 'message' => 'Invalid property ID.']);
+if ($csrf_token !== $_SESSION['csrf_token']) {
+    echo json_encode(['success' => false, 'message' => 'CSRF token validation failed']);
     exit;
 }
 
-// Check if property exists
-$stmt = $conn->prepare("SELECT id FROM properties WHERE id = ?");
-$stmt->bind_param("i", $property_id);
-if (!$stmt->execute()) {
-    error_log("Error checking property existence: " . $stmt->error);
-    echo json_encode(['success' => false, 'message' 'Database error while checking property.']);
-    $stmt->close();
-    $conn->close();
-    exit;
-}
-if (!$stmt->get_result()->num_rows) {
-    echo json_encode(['success' => false, 'message' => 'Property not found.']);
-    $stmt->close();
-    $conn->close();
-    exit;
-}
+// Verify tenant role
+$stmt = $conn->prepare("SELECT role FROM users WHERE user_id = ?");
+$stmt->bind_param("s", $tenant_id);
+$stmt->execute();
+$role = $stmt->get_result()->fetch_assoc()['role'] ?? null;
 $stmt->close();
+
+if ($role !== 'tenant') {
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    exit;
+}
 
 // Check if already favorited
-$stmt = $conn->prepare("SELECT id FROM favorites WHERE user_id = ? AND property_id = ?");
-$stmt->bind_param("ii", $user_id, $property_id);
-if (!$stmt->execute()) {
-    error_log("Error checking favorite status: " . $stmt->error);
-    echo json_encode(['success' => false, 'message' => 'Database error while checking favorite status.']);
-    $stmt->close();
-    $conn->close();
-    exit;
-}
-$result = $stmt->get_result();
-$is_favorited = $result->num_rows > 0;
+$stmt = $conn->prepare("SELECT favorite_id FROM favorites WHERE tenant_id = ? AND property_id = ?");
+$stmt->bind_param("ss", $tenant_id, $property_id);
+$stmt->execute();
+$favorite = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-if ($is_favorited) {
+if ($favorite) {
     // Remove from favorites
-    $stmt = $conn->prepare("DELETE FROM favorites WHERE user_id = ? AND property_id = ?");
-    $stmt->bind_param("ii", $user_id, $property_id);
-    if (!$stmt->execute()) {
-        error_log("Error removing favorite: " . $stmt->error);
-        echo json_encode(['success' => false, 'message' => 'Failed to remove property from favorites.']);
-        $stmt->close();
-        $conn->close();
-        exit;
-    }
+    $stmt = $conn->prepare("DELETE FROM favorites WHERE tenant_id = ? AND property_id = ?");
+    $stmt->bind_param("ss", $tenant_id, $property_id);
+    $stmt->execute();
     $stmt->close();
-    echo json_encode(['success' => true, 'message' => 'Property removed from favorites.']);
+    echo json_encode(['success' => true]);
 } else {
     // Add to favorites
-    $stmt = $conn->prepare("INSERT INTO favorites (user_id, property_id) VALUES (?, ?)");
-    $stmt->bind_param("ii", $user_id, $property_id);
-    if (!$stmt->execute()) {
-        error_log("Error adding favorite: " . $stmt->error);
-        echo json_encode(['success' => false, 'message' => 'Failed to add property to favorites.']);
-        $stmt->close();
-        $conn->close();
-        exit;
-    }
+    $stmt = $conn->prepare("INSERT INTO favorites (favorite_id, tenant_id, property_id, created_at) VALUES (UUID(), ?, ?, NOW())");
+    $stmt->bind_param("ss", $tenant_id, $property_id);
+    $stmt->execute();
     $stmt->close();
-    echo json_encode(['success' => true, 'message' => 'Property added to favorites.']);
+    echo json_encode(['success' => true]);
 }
-
-$conn->close();
 ?>

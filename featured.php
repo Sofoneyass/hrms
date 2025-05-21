@@ -20,18 +20,18 @@ $result = $conn->query($sql);
 // Initialize favorited properties array
 $favorited_properties = [];
 
-if (isset($user_id)) {
+if ($user_id) {
     // Ensure this user is a tenant before checking favorites
     $role_check = $conn->prepare("SELECT role FROM users WHERE user_id = ?");
-    $role_check->bind_param("i", $user_id);
+    $role_check->bind_param("s", $user_id); // UUID should be bound as string
     $role_check->execute();
     $role_result = $role_check->get_result();
-    $user_role = $role_result->fetch_assoc()['role'];
+    $user_role = $role_result->fetch_assoc()['role'] ?? null;
     $role_check->close();
 
     if ($user_role === 'tenant') {
         $stmt = $conn->prepare("SELECT property_id FROM favorites WHERE tenant_id = ?");
-        $stmt->bind_param("i", $user_id);
+        $stmt->bind_param("s", $user_id); // UUID should be bound as string
         $stmt->execute();
         $fav_result = $stmt->get_result();
         while ($row = $fav_result->fetch_assoc()) {
@@ -41,6 +41,7 @@ if (isset($user_id)) {
     }
 }
 ?>
+
 
 <section class="featured-properties">
     <div class="container">

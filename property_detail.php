@@ -1,20 +1,17 @@
 <?php
-
 include 'db_connection.php';
 include 'header.php';
 
-
-
-// Initialize CSRF token if not set
+// Initialize CSRF token
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+// Validate UUID format
+if (!isset($_GET['id']) || !preg_match('/^[a-f0-9\-]{36}$/i', $_GET['id'])) {
     die("Invalid property ID.");
 }
-
-$property_id = intval($_GET['id']);
+$property_id = $_GET['id'];
 
 // Fetch property details
 $property_sql = "
@@ -28,7 +25,7 @@ LEFT JOIN users u ON p.owner_id = u.user_id
 WHERE p.property_id = ?
 ";
 $stmt = $conn->prepare($property_sql);
-$stmt->bind_param("i", $property_id);
+$stmt->bind_param("s", $property_id); // UUID is string
 if (!$stmt->execute()) {
     error_log("Error fetching property: " . $stmt->error);
     die("Database error.");
@@ -45,7 +42,7 @@ $stmt->close();
 // Fetch property photos
 $photos_sql = "SELECT photo_url FROM property_photos WHERE property_id = ?";
 $photo_stmt = $conn->prepare($photos_sql);
-$photo_stmt->bind_param("i", $property_id);
+$photo_stmt->bind_param("s", $property_id);
 if (!$photo_stmt->execute()) {
     error_log("Error fetching photos: " . $photo_stmt->error);
 }
@@ -53,16 +50,22 @@ $photos_result = $photo_stmt->get_result();
 
 $photos = [];
 while ($row = $photos_result->fetch_assoc()) {
-    $photo_path = $row['photo_url'];
-    $photos[] = file_exists($photo_path) ? $photo_path : 'Uploads/default.png';
+    $photo_url = preg_replace('#^Uploads/#', '', $row['photo_url']);
+    $full_path = __DIR__ . "/Uploads/" . $photo_url;
+
+    if (file_exists($full_path) && !empty($photo_url)) {
+        $photos[] = "/Uploads/" . $photo_url;
+    } else {
+        $photos[] = "/Uploads/default.png";
+    }
 }
 $photo_stmt->close();
 
-// Check if property is favorited
+// Check if property is favorited (for tenants)
 $is_favorited = false;
 if (isset($_SESSION['user_id']) && $_SESSION['role'] === 'tenant') {
     $stmt = $conn->prepare("SELECT favorite_id FROM favorites WHERE tenant_id = ? AND property_id = ?");
-    $stmt->bind_param("ii", $_SESSION['user_id'], $property_id);
+    $stmt->bind_param("is", $_SESSION['user_id'], $property_id);
     if ($stmt->execute()) {
         $is_favorited = $stmt->get_result()->num_rows > 0;
     } else {
@@ -73,7 +76,7 @@ if (isset($_SESSION['user_id']) && $_SESSION['role'] === 'tenant') {
 
 // Handle messaging
 $message_sent = false;
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message']) && isset($_POST['csrf_token']) && $_POST['csrf_token'] === $_SESSION['csrf_token']) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'], $_POST['csrf_token']) && $_POST['csrf_token'] === $_SESSION['csrf_token']) {
     $message = $_POST['message'];
     $tenant_id = $_SESSION['user_id'];
 
@@ -90,11 +93,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message']) && isset($
 
 // Handle booking
 $booking_success = false;
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book']) && isset($_POST['csrf_token']) && $_POST['csrf_token'] === $_SESSION['csrf_token']) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_token']) && $_POST['csrf_token'] === $_SESSION['csrf_token']) {
     $tenant_id = $_SESSION['user_id'];
+
     $booking_sql = "INSERT INTO bookings (tenant_id, property_id, status, start_date) VALUES (?, ?, 'pending', NOW())";
     $booking_stmt = $conn->prepare($booking_sql);
-    $booking_stmt->bind_param("ii", $tenant_id, $property_id);
+    $booking_stmt->bind_param("is", $tenant_id, $property_id);
     if ($booking_stmt->execute()) {
         $booking_success = true;
     } else {
@@ -103,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book']) && isset($_PO
     $booking_stmt->close();
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -704,27 +709,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book']) && isset($_PO
         </div>
 
         <!-- Photo Gallery -->
-        <div class="gallery">
-            <div class="gallery-main">
-                <img src="<?= !empty($photos) ? htmlspecialchars($photos[0]) : 'Uploads/default.png' ?>" alt="Main property photo">
-            </div>
-            
-            <div class="gallery-thumbs">
-                <?php for ($i = 1; $i < min(3, count($photos)); $i++): ?>
-                    <div class="gallery-thumb">
-                        <img src="<?= htmlspecialchars($photos[$i]) ?>" alt="Property photo <?= $i ?>">
-                    </div>
-                <?php endfor; ?>
-                
-                <?php if (count($photos) < 3): ?>
-                    <?php for ($i = count($photos); $i < 3; $i++): ?>
-                        <div class="gallery-thumb">
-                            <img src="Uploads/default.png" alt="Default property photo">
-                        </div>
-                    <?php endfor; ?>
-                <?php endif; ?>
-            </div>
-        </div>
+<?php
+// Example: fetch photos from database
+// $photos = ['Uploads/image1.jpg', 'Uploads/image2.jpg'];
+?>
+<div class="gallery">
+    <div class="gallery-main">
+        <img src="<?= (!empty($photos) && !empty($photos[0])) ? htmlspecialchars($photos[0]) : '/Uploads/default.png' ?>" alt="Main property photo" style="max-width: 100%; height: auto;">
+    </div>
+</div>
 
         <!-- Key Details -->
         <div class="details-grid">
