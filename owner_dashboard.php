@@ -427,6 +427,7 @@ for ($i = 90; $i >= 0; $i--) {
         <a href="owner_dashboard.php" class="active">Dashboard</a>
         <a href="my_properties.php">My Properties</a>
         <a href="manage_leases.php">Manage Leases</a>
+        <a href="messages.php">Messages</a>
         <a href="view_payments.php">View Payments</a>
         <a href="profile.php">Profile</a>
         <a href="logout.php">Logout</a>

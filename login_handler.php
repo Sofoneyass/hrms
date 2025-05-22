@@ -133,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Redirect based on role
             $redirect = match($user['role']) {
-                'admin' => 'index.php',
+                'admin' => 'admin_dashboard.php',
                 'owner' => 'index.php',
                 'tenant' => 'index.php',
                 default => 'index.php'

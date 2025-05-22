@@ -421,6 +421,7 @@ if (isset($_GET['id']) && !empty($_GET['id'])) {
         <a href="owner_dashboard.php">Dashboard</a>
         <a href="my_properties.php" class="active">Manage Properties</a>
         <a href="owner_manage_leases.php">Manage Leases</a>
+        <a href="messages.php">Messages</a>
         <a href="owner_view_payments.php">View Payments</a>
         <a href="profile.php">Profile</a>
         <a href="logout.php">Logout</a>

@@ -56,25 +56,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $emailStmt->close();
 
     if (empty($errors)) {
-        $stmt = $conn->prepare("UPDATE users SET 
-                                full_name = ?, 
-                                email = ?, 
-                                phone = ?, 
-                                role = ?, 
-                                status = ?, 
-                                updated_at = NOW() 
-                                WHERE user_id = ?");
-        $phone = $phone ?: null; // Allow null phone
-        $stmt->bind_param("ssssss", $fullName, $email, $phone, $role, $status, $userId);
-        
-        if ($stmt->execute()) {
-            $_SESSION['success_message'] = "User updated successfully!";
-            header("Location: manage_users.php");
-            exit;
-        } else {
-            $errors[] = "Error updating user: " . $stmt->error;
+        // Check if role is changing from owner to tenant
+        if ($user['role'] === 'owner' && $role === 'tenant') {
+            // Delete all properties associated with this user
+            $deleteStmt = $conn->prepare("DELETE FROM properties WHERE owner_id = ?");
+            if (!$deleteStmt) {
+                $errors[] = "Error preparing property deletion: " . $conn->error;
+            } else {
+                $deleteStmt->bind_param("s", $userId);
+                if (!$deleteStmt->execute()) {
+                    $errors[] = "Error deleting properties: " . $deleteStmt->error;
+                } else {
+                    // Optional: Log the number of deleted properties
+                    $deletedRows = $deleteStmt->affected_rows;
+                    $_SESSION['success_message'] .= " $deletedRows propert" . ($deletedRows === 1 ? "y" : "ies") . " removed.";
+                }
+                $deleteStmt->close();
+            }
         }
-        $stmt->close();
+
+        // Proceed with user update if no errors
+        if (empty($errors)) {
+            $stmt = $conn->prepare("UPDATE users SET 
+                                    full_name = ?, 
+                                    email = ?, 
+                                    phone = ?, 
+                                    role = ?, 
+                                    status = ?, 
+                                    updated_at = NOW() 
+                                    WHERE user_id = ?");
+            $phone = $phone ?: null; // Allow null phone
+            $stmt->bind_param("ssssss", $fullName, $email, $phone, $role, $status, $userId);
+            
+            if ($stmt->execute()) {
+                $_SESSION['success_message'] = "User updated successfully!" . ($_SESSION['success_message'] ?? '');
+                header("Location: manage_users.php");
+                exit;
+            } else {
+                $errors[] = "Error updating user: " . $stmt->error;
+            }
+            $stmt->close();
+        }
     }
 }
 ?>

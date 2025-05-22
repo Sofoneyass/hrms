@@ -1,6 +1,6 @@
 <?php
 // Start the session
-session_start();
+
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -9,8 +9,8 @@ require_once 'db_connection.php';
 require_once 'header.php';
 require_once 'hero_section.php';
 require_once 'chooseus.php';
-require_once 'featured.php';
 require_once 'cta.php';
+
 
 // Fetch properties listed by owners from the database
 $sql = "SELECT p.*, 
@@ -42,25 +42,20 @@ $result = $conn->query($sql);
 
 
 <!-- Featured Properties -->
+<!-- Featured Properties -->
+
+<?php
+while ($property = $result->fetch_assoc()) {
+    include 'featured.php';
+}
+?>
 
 
 <!-- Testimonials -->
-<section class="testimonials section">
-    <div class="container">
-        <h2 class="section-title">Tenant Testimonials</h2>
-        <div class="testimonial-cards">
-            <div class="testimonial">
-                <p>"Smooth process, great property, amazing support. I found my dream home!"</p>
-                <h4>- Selam A.</h4>
-            </div>
-            <div class="testimonial">
-                <p>"Affordable pricing and premium quality homes. Thank you HouseRental!"</p>
-                <h4>- Dawit K.</h4>
-            </div>
-        </div>
-    </div>
-</section>
 
+<?php
+
+ ?>
 
 <?php
 require_once 'footer.php';

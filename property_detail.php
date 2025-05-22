@@ -25,7 +25,7 @@ LEFT JOIN users u ON p.owner_id = u.user_id
 WHERE p.property_id = ?
 ";
 $stmt = $conn->prepare($property_sql);
-$stmt->bind_param("s", $property_id); // UUID is string
+$stmt->bind_param("s", $property_id);
 if (!$stmt->execute()) {
     error_log("Error fetching property: " . $stmt->error);
     die("Database error.");
@@ -74,38 +74,40 @@ if (isset($_SESSION['user_id']) && $_SESSION['role'] === 'tenant') {
     $stmt->close();
 }
 
-// Handle messaging
-$message_sent = false;
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'], $_POST['csrf_token']) && $_POST['csrf_token'] === $_SESSION['csrf_token']) {
-    $message = $_POST['message'];
-    $tenant_id = $_SESSION['user_id'];
+// Fetch message history for tenant
+$messages = [];
 
-    $message_sql = "INSERT INTO messages (sender_id, receiver_id, message, sent_at) VALUES (?, ?, ?, NOW())";
-    $message_stmt = $conn->prepare($message_sql);
-    $message_stmt->bind_param("iis", $tenant_id, $property['owner_id'], $message);
-    if ($message_stmt->execute()) {
-        $message_sent = true;
+if (isset($_SESSION['user_id']) && $_SESSION['role'] === 'tenant') {
+    $stmt = $conn->prepare("
+        SELECT 
+            m.message_id, 
+            m.sender_id, 
+            m.receiver_id, 
+            m.property_id,
+            m.message, 
+            m.status, 
+            m.sent_at, 
+            u.full_name AS sender_name
+        FROM messages m
+        JOIN users u ON m.sender_id = u.user_id
+        WHERE m.property_id = ? 
+        AND (m.sender_id = ? OR m.receiver_id = ?)
+        ORDER BY m.sent_at ASC
+    ");
+
+    // UUIDs are strings, so use 'sss'
+    $stmt->bind_param("sss", $property_id, $_SESSION['user_id'], $_SESSION['user_id']);
+
+    if ($stmt->execute()) {
+        $result = $stmt->get_result();
+        $messages = $result->fetch_all(MYSQLI_ASSOC);
     } else {
-        error_log("Error sending message: " . $message_stmt->error);
+        error_log("Error fetching messages: " . $stmt->error);
     }
-    $message_stmt->close();
+
+    $stmt->close();
 }
 
-// Handle booking
-$booking_success = false;
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_token']) && $_POST['csrf_token'] === $_SESSION['csrf_token']) {
-    $tenant_id = $_SESSION['user_id'];
-
-    $booking_sql = "INSERT INTO bookings (tenant_id, property_id, status, start_date) VALUES (?, ?, 'pending', NOW())";
-    $booking_stmt = $conn->prepare($booking_sql);
-    $booking_stmt->bind_param("is", $tenant_id, $property_id);
-    if ($booking_stmt->execute()) {
-        $booking_success = true;
-    } else {
-        error_log("Error creating booking: " . $booking_stmt->error);
-    }
-    $booking_stmt->close();
-}
 ?>
 
 <!DOCTYPE html>
@@ -434,6 +436,119 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_
             transform: translateY(-3px);
         }
 
+        /* Messaging Section */
+        .messaging-section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 3rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--border);
+        }
+
+        .messaging-section h2 {
+            margin-bottom: 1.5rem;
+            color: var(--primary-dark);
+            position: relative;
+            padding-bottom: 0.8rem;
+        }
+
+        .messaging-section h2::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 50px;
+            height: 3px;
+            background: var(--accent);
+        }
+
+        .message-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .message-form textarea {
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 1rem;
+            resize: vertical;
+            width: 100%;
+            background-color: #f9f9f9;
+            transition: border-color 0.3s ease;
+        }
+
+        .message-form textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            background-color: #fff;
+        }
+
+        .message-form button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            align-self: flex-start;
+        }
+
+        .message-form button:hover {
+            background-color: var(--primary-dark);
+        }
+
+        .message-history {
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 1rem;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #fafafa;
+        }
+
+        .message-card {
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            background: var(--card-bg);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .message-card.sent {
+            background: rgba(42, 127, 98, 0.1);
+            align-self: flex-end;
+        }
+
+        .message-card.received {
+            background: rgba(240, 193, 75, 0.1);
+            align-self: flex-start;
+        }
+
+        .message-card .sender {
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin-bottom: 0.5rem;
+        }
+
+        .message-card .content {
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+
+        .message-card .timestamp {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            align-self: flex-end;
+        }
+
         /* CTA Buttons */
         .cta-buttons {
             display: flex;
@@ -654,7 +769,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_
         }
 
         @media (max-width: 600px) {
-            .review-card {
+            .review-card,
+            .message-card {
                 flex-direction: column;
                 align-items: center;
                 text-align: center;
@@ -664,7 +780,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_
                 margin-bottom: 0.5rem;
             }
             
-            .review-content {
+            .review-content,
+            .message-card {
                 width: 100%;
             }
         }
@@ -709,15 +826,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_
         </div>
 
         <!-- Photo Gallery -->
-<?php
-// Example: fetch photos from database
-// $photos = ['Uploads/image1.jpg', 'Uploads/image2.jpg'];
-?>
-<div class="gallery">
-    <div class="gallery-main">
-        <img src="<?= (!empty($photos) && !empty($photos[0])) ? htmlspecialchars($photos[0]) : '/Uploads/default.png' ?>" alt="Main property photo" style="max-width: 100%; height: auto;">
-    </div>
-</div>
+        <div class="gallery">
+            <div class="gallery-main">
+                <img src="<?= (!empty($photos) && !empty($photos[0])) ? htmlspecialchars($photos[0]) : '/Uploads/default.png' ?>" alt="Main property photo">
+            </div>
+            <div class="gallery-thumbs">
+                <?php for ($i = 1; $i < min(3, count($photos)); $i++): ?>
+                    <div class="gallery-thumb">
+                        <img src="<?= htmlspecialchars($photos[$i]) ?>" alt="Property photo <?php echo $i + 1; ?>">
+                    </div>
+                <?php endfor; ?>
+            </div>
+        </div>
 
         <!-- Key Details -->
         <div class="details-grid">
@@ -739,7 +859,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_
             <div class="detail-card">
                 <h3><i class="fas fa-calendar-check"></i> Availability</h3>
                 <p>Ready for immediate move-in</p>
-                <p>Minimum lease: 12 months</p>
+                <p>Minimum lease: 4 months</p>
                 <p>Security deposit: 1 month rent</p>
             </div>
         </div>
@@ -767,12 +887,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_
             </div>
         </div>
 
+        <!-- Messaging Section -->
+        <?php if (isset($_SESSION['user_id']) && $_SESSION['role'] === 'tenant'): ?>
+            <div class="messaging-section">
+                <h2>Contact Owner</h2>
+                <form id="messageForm" class="message-form">
+                    <input type="hidden" name="property_id" value="<?= htmlspecialchars($property['property_id']) ?>">
+                    <input type="hidden" name="receiver_id" value="<?= htmlspecialchars($property['owner_id']) ?>">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                    <textarea name="message" id="messageInput" placeholder="Type your message to the owner..." required maxlength="1000" aria-label="Message to owner"></textarea>
+                    <button type="submit" class="btn-primary"><i class="fas fa-paper-plane"></i> Send Message</button>
+                </form>
+                
+                <div class="message-history">
+                    <h3>Conversation History</h3>
+                    <?php if (empty($messages)): ?>
+                        <p>No messages yet. Start the conversation!</p>
+                    <?php else: ?>
+                        <?php foreach ($messages as $message): ?>
+                            <div class="message-card <?= $message['sender_id'] == $_SESSION['user_id'] ? 'sent' : 'received' ?>">
+                                <div class="sender"><?= htmlspecialchars($message['sender_name']) ?></div>
+                                <div class="content"><?= nl2br(htmlspecialchars($message['message'])) ?></div>
+                                <div class="timestamp"><?= date('M j, Y, H:i', strtotime($message['sent_at'])) ?></div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+
         <!-- Call to Action -->
         <div class="cta-buttons">
-            <a href="create_lease.php?property_id=<?= $property['property_id'] ?>" class="btn btn-primary">
-                <i class="fas fa-file-signature"></i> Lease Now
-            </a>
-            <button class="btn btn-outline">
+            <?php if (isset($_SESSION['user_id']) && $_SESSION['role'] === 'tenant'): ?>
+                <form action="" method="POST" style="display: inline;">
+                    <input type="hidden" name="book" value="1">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-calendar-plus"></i> Book Now
+                    </button>
+                </form>
+            <?php else: ?>
+                <a href="create_lease.php?property_id=<?= $property['property_id'] ?>" class="btn btn-primary">
+                    <i class="fas fa-file-signature"></i> Lease Now
+                </a>
+            <?php endif; ?>
+            <button class="btn btn-outline" onclick="showToast('Please contact the owner for questions.')">
                 <i class="fas fa-question-circle"></i> Ask Question
             </button>
         </div>
@@ -809,7 +968,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_
                         WHERE r.property_id = ?
                         ORDER BY r.created_at DESC
                     ");
-                    $stmt->bind_param("i", $property_id);
+                    $stmt->bind_param("s", $property_id);
                     if (!$stmt->execute()) {
                         error_log("Error fetching reviews: " . $stmt->error);
                     }
@@ -903,6 +1062,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_
                 });
             }
 
+            // Messaging form submission
+            const messageForm = document.getElementById('messageForm');
+            if (messageForm) {
+                messageForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const messageInput = document.getElementById('messageInput');
+                    const message = messageInput.value.trim();
+                    const propertyId = messageForm.querySelector('input[name="property_id"]').value;
+                    const receiverId = messageForm.querySelector('input[name="receiver_id"]').value;
+                    const csrfToken = messageForm.querySelector('input[name="csrf_token"]').value;
+
+                    if (message.length === 0) {
+                        showToast('Please enter a message.');
+                        return;
+                    }
+                    if (message.length > 1000) {
+                        showToast('Message is too long (max 1000 characters).');
+                        return;
+                    }
+
+                    fetch('message_handler.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            property_id: propertyId,
+                            receiver_id: receiverId,
+                            message: message,
+                            csrf_token: csrfToken
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            messageInput.value = '';
+                            showToast('Message sent successfully.');
+                            // Append new message to history
+                            const messageHistory = document.querySelector('.message-history');
+                            const messageCard = document.createElement('div');
+                            messageCard.className = 'message-card sent';
+                            messageCard.innerHTML = `
+                                <div class="sender"><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'You'); ?></div>
+                                <div class="content">${message.replace(/\n/g, '<br>')}</div>
+                                <div class="timestamp">${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                            `;
+                            messageHistory.appendChild(messageCard);
+                            messageHistory.scrollTop = messageHistory.scrollHeight;
+                        } else {
+                            showToast(data.message || 'Failed to send message.');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error sending message:', error);
+                        showToast('Failed to connect to the server.');
+                    });
+                });
+            }
+
             // Toast notification function
             function showToast(message) {
                 let toast = document.querySelector('.toast');
@@ -918,11 +1136,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book'], $_POST['csrf_
                 }, 3000);
             }
 
-            // Show feedback for messaging and booking
-            <?php if ($message_sent): ?>
-                showToast('Message sent to owner successfully.');
-            <?php endif; ?>
-            <?php if ($booking_success): ?>
+            // Show feedback for booking
+            <?php if (isset($booking_success) && $booking_success): ?>
                 showToast('Booking request submitted successfully.');
             <?php endif; ?>
         });

@@ -337,7 +337,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <h2>JIGJIGAHOMES</h2>
         <a href="owner_dashboard.php">Dashboard</a>
         <a href="my_properties.php" class="active">my Properties</a>
-        <a href="manage_leases.php">Manage Leases</a>
+        <a href="owner_manage_leases.php">Manage Leases</a>
+         <a href="messages.php">Messages</a>
         <a href="view_payments.php">View Payments</a>
         <a href="profile.php">Profile</a>
         <a href="logout.php">Logout</a>

@@ -654,7 +654,9 @@ for ($i = 90; $i >= 0; $i--) {
         <a href="browse_properties.php"><i class="fas fa-search"></i> Browse Properties</a>
         <a href="my_favorites.php"><i class="fas fa-heart"></i> My Favorites</a>
         <a href="my_leases.php"><i class="fas fa-file-signature"></i> My Leases</a>
-        <a href="messages.php"><i class="fas fa-envelope"></i> Messages</a>
+        <a href="messages.php" class="flex items-center gap-2 p-2 rounded-lg hover:bg-blue-100">
+    <i class="fas fa-envelope"></i> Messages
+</a>
         <a href="profile.php"><i class="fas fa-user"></i> Profile</a>
         <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
     </div>
